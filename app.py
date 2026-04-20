@@ -35,8 +35,11 @@ ANGLE_TERM_OPTIONS = {"none", "0", "250", "500", "1500"}
 DEFAULT_ANGLE_TERM_MINFF = "500"
 DEFAULT_ANGLE_TERM_CLAYFF = "none"
 
-# Add the parent directory to sys.path to import atomipy
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Base directory for resolving templates/static regardless of CWD
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Add the BASE_DIR to sys.path to import the local atomipy package
+sys.path.insert(0, BASE_DIR)
 
 # Lazy loader for atomipy to reduce initial memory footprint
 _ap = None
@@ -64,9 +67,9 @@ app = Flask(
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE  # Reduced to 16 MB for better stability
 
-# App Engine specific configuration
+# App Engine / Cloud Run specific configuration
 app.config['EXECUTOR_TYPE'] = 'thread'
-app.config['EXECUTOR_MAX_WORKERS'] = 8  # Limit concurrent tasks to prevent resource exhaustion
+app.config['EXECUTOR_MAX_WORKERS'] = 3  # Reduced to 3 to stay within 1GB RAM budget on Cloud Run
 
 # Initialize Flask-Executor
 executor = Executor(app)
@@ -76,9 +79,9 @@ tasks_status = {}  # Dictionary to store task status
 UPLOAD_FOLDER_NAME = 'uploads'
 RESULTS_FOLDER_NAME = 'results'
 
-# Use /tmp for writable storage on App Engine, otherwise use local folders
-# Check for any Google Cloud environment: GAE_ENV, GAE_INSTANCE, or CLOUD_RUN_JOB
-if os.environ.get('GAE_ENV', '').startswith('standard') or os.environ.get('GAE_INSTANCE') or os.environ.get('CLOUD_RUN_JOB'):
+# Use /tmp for writable storage on App Engine / Cloud Run
+# Check for any Google Cloud environment markers (GAE_ENV, K_SERVICE is standard for Cloud Run)
+if os.environ.get('GAE_ENV', '').startswith('standard') or os.environ.get('GAE_INSTANCE') or os.environ.get('K_SERVICE'):
     app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
     app.config['RESULTS_FOLDER'] = '/tmp/results'
     app.config['TEMP_DIR'] = '/tmp'
