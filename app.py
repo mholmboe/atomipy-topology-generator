@@ -655,8 +655,15 @@ def start_processing_task():  # Renamed route function
                 return jsonify({'error': 'Please select at least one output topology format or disable topology generation.'}), 400
 
         try:
-            # Generate a unique task ID
-            task_id = str(uuid.uuid4())
+            # Accept client-provided task_id so the browser can poll status immediately.
+            task_id = request.form.get('task_id', '').strip()
+            if task_id:
+                try:
+                    uuid.UUID(task_id)
+                except ValueError:
+                    task_id = str(uuid.uuid4())
+            else:
+                task_id = str(uuid.uuid4())
             tasks_status[task_id] = {'status': 'Pending', 'progress': 0}
 
             # Log the task submission

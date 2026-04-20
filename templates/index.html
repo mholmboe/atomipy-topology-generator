@@ -412,16 +412,75 @@
 
         let taskId = null;
         let pollInterval = null;
+        let hasRedirected = false;
+
+        function createTaskId() {
+            if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                return window.crypto.randomUUID();
+            }
+            return 'task-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        }
 
         // Function to reset UI
         function resetUI() {
             progressSection.style.display = 'none';
             submitButton.disabled = false;
             submitButton.innerHTML = '<i class="bi bi-cloud-upload"></i> Process File';
+            hasRedirected = false;
             if (pollInterval) {
                 clearInterval(pollInterval);
             }
         }
+
+        function startPollingStatus() {
+            if (!taskId) {
+                return;
+            }
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+            pollInterval = setInterval(() => {
+                fetch(`/status/${taskId}`)
+                    .then(response => response.json())
+                    .then(statusData => {
+                        const status = statusData.status || 'Unknown';
+                        const progress = Number.isFinite(statusData.progress) ? statusData.progress : 0;
+
+                        if (status === 'Unknown') {
+                            progressStatus.textContent = 'Waiting for task to start...';
+                            return;
+                        }
+
+                        progressBar.style.width = progress + '%';
+                        progressBar.setAttribute('aria-valuenow', progress);
+                        progressBar.textContent = progress + '%';
+                        progressStatus.textContent = statusData.step || status;
+
+                        if (status === 'Complete' && !hasRedirected) {
+                            hasRedirected = true;
+                            clearInterval(pollInterval);
+                            progressStatus.textContent = 'Processing complete! Redirecting...';
+                            window.location.href = `/task_result/${taskId}`;
+                        } else if (status === 'Error') {
+                            clearInterval(pollInterval);
+                            progressStatus.textContent = `Error: ${statusData.message || 'Unknown error occurred.'}`;
+                            alert(`Processing failed: ${statusData.message || 'Unknown error occurred.'}`);
+                            resetUI();
+                        }
+                    })
+                    .catch(pollError => {
+                        console.error('Polling error:', pollError);
+                        progressStatus.textContent = 'Error checking status. Please try again.';
+                        clearInterval(pollInterval);
+                        resetUI();
+                    });
+            }, 2000); // Poll every 2 seconds
+        }
+
+        taskId = createTaskId();
+        formData.set('task_id', taskId);
+        progressStatus.textContent = 'Uploading file and starting task...';
+        startPollingStatus();
 
         // --- Start the background task ---
         fetch('{{ url_for("start_processing_task") }}', {
@@ -439,50 +498,11 @@
                 if (data.error) {
                     throw new Error(data.error);
                 }
-                taskId = data.task_id;
-                progressStatus.textContent = 'Processing started. Waiting for updates...';
-
-                // Inline mode means the server kept this request open until processing completed.
-                if (data.processing_mode === 'inline') {
-                    progressBar.style.width = '100%';
-                    progressBar.setAttribute('aria-valuenow', 100);
-                    progressBar.textContent = '100%';
-                    progressStatus.textContent = 'Processing complete! Redirecting...';
-                    window.location.href = `/task_result/${taskId}`;
-                    return;
+                if (data.task_id && data.task_id !== taskId) {
+                    taskId = data.task_id;
+                    startPollingStatus();
                 }
-
-                // --- Start polling for status ---
-                pollInterval = setInterval(() => {
-                    fetch(`/status/${taskId}`)
-                        .then(response => response.json())
-                        .then(statusData => {
-                            progressBar.style.width = statusData.progress + '%';
-                            progressBar.setAttribute('aria-valuenow', statusData.progress);
-                            progressBar.textContent = statusData.progress + '%';
-                            progressStatus.textContent = statusData.step || statusData.status; // Show step if available
-
-                            if (statusData.status === 'Complete') {
-                                clearInterval(pollInterval);
-                                progressStatus.textContent = 'Processing complete! Redirecting...';
-                                // Redirect to a route that handles the final redirect based on task completion
-                                window.location.href = `/task_result/${taskId}`;
-                                // UI reset will happen on page reload
-                            } else if (statusData.status === 'Error') {
-                                clearInterval(pollInterval);
-                                progressStatus.textContent = `Error: ${statusData.message || 'Unknown error occurred.'}`;
-                                // Optionally add an alert
-                                alert(`Processing failed: ${statusData.message || 'Unknown error occurred.'}`);
-                                resetUI();
-                            }
-                        })
-                        .catch(pollError => {
-                            console.error('Polling error:', pollError);
-                            progressStatus.textContent = 'Error checking status. Please try again.';
-                            clearInterval(pollInterval);
-                            resetUI();
-                        });
-                }, 2000); // Poll every 2 seconds
+                progressStatus.textContent = 'Processing started. Waiting for updates...';
             })
             .catch(error => {
                 console.error('Submission error:', error);
