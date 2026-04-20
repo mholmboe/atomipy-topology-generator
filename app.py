@@ -79,16 +79,18 @@ tasks_status = {}  # Dictionary to store task status
 UPLOAD_FOLDER_NAME = 'uploads'
 RESULTS_FOLDER_NAME = 'results'
 
-# Use /tmp for writable storage on App Engine / Cloud Run
-# Check for any Google Cloud environment markers (GAE_ENV, K_SERVICE is standard for Cloud Run)
-if os.environ.get('GAE_ENV', '').startswith('standard') or os.environ.get('GAE_INSTANCE') or os.environ.get('K_SERVICE'):
+# Use /tmp for writable storage (standard for Google Cloud Run / App Engine)
+# In production, Cloud Run's /tmp is the only shared writable space in the container.
+if os.environ.get('K_SERVICE') or os.environ.get('GAE_ENV') or os.environ.get('GAE_INSTANCE'):
     app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
     app.config['RESULTS_FOLDER'] = '/tmp/results'
     app.config['TEMP_DIR'] = '/tmp'
-    print(f"Running in cloud environment, using /tmp for writable storage")
+    print(f"Running on Google Cloud, using /tmp for writable storage")
 else:
-    app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), UPLOAD_FOLDER_NAME)
-    app.config['RESULTS_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), RESULTS_FOLDER_NAME)
+    # Local Development
+    app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, UPLOAD_FOLDER_NAME)
+    app.config['RESULTS_FOLDER'] = os.path.join(BASE_DIR, RESULTS_FOLDER_NAME)
+    app.config['TEMP_DIR'] = BASE_DIR
 
 app.config['ALLOWED_EXTENSIONS'] = {'gro', 'pdb', 'xyz', 'cif', 'mmcif', 'mcif'}
 
