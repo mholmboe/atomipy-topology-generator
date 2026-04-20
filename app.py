@@ -78,9 +78,10 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE  # Reduced to 16 MB for better 
 # App Engine / Cloud Run specific configuration
 app.config['EXECUTOR_TYPE'] = 'thread'
 app.config['EXECUTOR_MAX_WORKERS'] = 3  # Reduced to 3 to stay within 1GB RAM budget on Cloud Run
-# On Cloud Run request-based billing, background work after response is CPU-throttled.
-# Default to inline processing in cloud; keep async background mode for local/dev unless explicitly enabled.
-app.config['PROCESS_INLINE'] = env_flag('ATOMIPY_PROCESS_INLINE', IS_CLOUD_ENV)
+# Keep background mode by default and allow inline mode only when explicitly enabled.
+# Frontend long-polling keeps a request active during processing, which preserves live progress updates
+# and helps reduce Cloud Run CPU throttling effects.
+app.config['PROCESS_INLINE'] = env_flag('ATOMIPY_PROCESS_INLINE', False)
 
 # Initialize Flask-Executor
 executor = Executor(app)
@@ -766,6 +767,40 @@ def results(results_id):
 def get_status(task_id):
     status = tasks_status.get(task_id, {'status': 'Unknown', 'progress': 0, 'message': 'Task ID not found.'})
     return jsonify(status)
+
+@app.route('/status_wait/<task_id>')
+def wait_for_status_update(task_id):
+    """
+    Long-poll endpoint used by the browser to keep one active request open.
+    This improves progress UX and helps sustain Cloud Run CPU allocation while background work runs.
+    """
+    timeout = parse_float(request.args.get('timeout'), 25.0)
+    timeout = max(1.0, min(timeout, 55.0))
+    last_status = request.args.get('last_status', '')
+    last_step = request.args.get('last_step', '')
+    last_progress = parse_int(request.args.get('last_progress'), -1)
+
+    deadline = time.time() + timeout
+    unknown = {'status': 'Unknown', 'progress': 0, 'message': 'Task ID not found.'}
+
+    while time.time() < deadline:
+        status = tasks_status.get(task_id, unknown)
+        current_status = str(status.get('status', 'Unknown'))
+        current_step = str(status.get('step', ''))
+        current_progress = parse_int(status.get('progress'), 0)
+
+        changed = (
+            current_status != last_status
+            or current_step != last_step
+            or current_progress != last_progress
+        )
+        terminal = current_status in {'Complete', 'Error'}
+
+        if changed or terminal or current_status == 'Unknown':
+            return jsonify(status)
+        time.sleep(0.2)
+
+    return jsonify(tasks_status.get(task_id, unknown))
 
 @app.route('/task_result/<task_id>')
 def get_task_result(task_id):

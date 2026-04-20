@@ -411,8 +411,11 @@
         }
 
         let taskId = null;
-        let pollInterval = null;
+        let pollSession = 0;
         let hasRedirected = false;
+        let lastStatus = '';
+        let lastStep = '';
+        let lastProgress = -1;
 
         function createTaskId() {
             if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -427,29 +430,43 @@
             submitButton.disabled = false;
             submitButton.innerHTML = '<i class="bi bi-cloud-upload"></i> Process File';
             hasRedirected = false;
-            if (pollInterval) {
-                clearInterval(pollInterval);
-            }
+            pollSession += 1;
+            lastStatus = '';
+            lastStep = '';
+            lastProgress = -1;
         }
 
         function startPollingStatus() {
             if (!taskId) {
                 return;
             }
-            if (pollInterval) {
-                clearInterval(pollInterval);
-            }
-            pollInterval = setInterval(() => {
-                fetch(`/status/${taskId}`)
-                    .then(response => response.json())
-                    .then(statusData => {
+            const sessionId = ++pollSession;
+
+            const pollLoop = async () => {
+                while (sessionId === pollSession && !hasRedirected) {
+                    try {
+                        const params = new URLSearchParams({
+                            last_status: lastStatus,
+                            last_step: lastStep,
+                            last_progress: String(lastProgress),
+                            timeout: '25',
+                        });
+                        const response = await fetch(`/status_wait/${taskId}?${params.toString()}`, {
+                            cache: 'no-store',
+                        });
+                        const statusData = await response.json();
                         const status = statusData.status || 'Unknown';
-                        const progress = Number.isFinite(statusData.progress) ? statusData.progress : 0;
+                        const progressVal = Number(statusData.progress);
+                        const progress = Number.isFinite(progressVal) ? progressVal : 0;
 
                         if (status === 'Unknown') {
                             progressStatus.textContent = 'Waiting for task to start...';
-                            return;
+                            continue;
                         }
+
+                        lastStatus = status;
+                        lastStep = statusData.step || '';
+                        lastProgress = progress;
 
                         progressBar.style.width = progress + '%';
                         progressBar.setAttribute('aria-valuenow', progress);
@@ -458,23 +475,27 @@
 
                         if (status === 'Complete' && !hasRedirected) {
                             hasRedirected = true;
-                            clearInterval(pollInterval);
                             progressStatus.textContent = 'Processing complete! Redirecting...';
                             window.location.href = `/task_result/${taskId}`;
-                        } else if (status === 'Error') {
-                            clearInterval(pollInterval);
+                            return;
+                        }
+
+                        if (status === 'Error') {
                             progressStatus.textContent = `Error: ${statusData.message || 'Unknown error occurred.'}`;
                             alert(`Processing failed: ${statusData.message || 'Unknown error occurred.'}`);
                             resetUI();
+                            return;
                         }
-                    })
-                    .catch(pollError => {
+                    } catch (pollError) {
                         console.error('Polling error:', pollError);
                         progressStatus.textContent = 'Error checking status. Please try again.';
-                        clearInterval(pollInterval);
                         resetUI();
-                    });
-            }, 2000); // Poll every 2 seconds
+                        return;
+                    }
+                }
+            };
+
+            pollLoop();
         }
 
         taskId = createTaskId();
@@ -500,6 +521,9 @@
                 }
                 if (data.task_id && data.task_id !== taskId) {
                     taskId = data.task_id;
+                    lastStatus = '';
+                    lastStep = '';
+                    lastProgress = -1;
                     startPollingStatus();
                 }
                 progressStatus.textContent = 'Processing started. Waiting for updates...';

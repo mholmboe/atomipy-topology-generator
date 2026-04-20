@@ -58,12 +58,11 @@ Access the app at `http://localhost:5001`.
 
 ### Processing Mode
 
-By default, the app now runs heavy topology generation **inline inside the request** on cloud platforms.
-This avoids Cloud Run CPU throttling that can happen when long jobs are started in background threads after
-the HTTP response is returned.
+By default, the app runs topology generation in **background mode** and the frontend uses long-poll status
+requests to keep progress updates live during processing.
 
-- `ATOMIPY_PROCESS_INLINE=true` (recommended for Cloud Run)
-- `ATOMIPY_PROCESS_INLINE=false` (legacy background executor mode)
+- `ATOMIPY_PROCESS_INLINE=false` (default, recommended for live progress UI)
+- `ATOMIPY_PROCESS_INLINE=true` (forces inline processing in the upload request)
 
 ---
 
