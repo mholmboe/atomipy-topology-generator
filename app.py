@@ -8,6 +8,8 @@ import logging
 import traceback
 import importlib.util
 import copy
+import threading
+import contextlib
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, session, Response, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -41,6 +43,15 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Add the BASE_DIR to sys.path to import the local atomipy package
 sys.path.insert(0, BASE_DIR)
 
+# Cloud environment detection and env-flag parser used during app startup.
+IS_CLOUD_ENV = bool(os.environ.get('K_SERVICE') or os.environ.get('GAE_ENV') or os.environ.get('GAE_INSTANCE'))
+
+def env_flag(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
 # Lazy loader for atomipy to reduce initial memory footprint
 _ap = None
 def get_ap():
@@ -56,9 +67,6 @@ def get_ap_forcefield():
     from atomipy import forcefield
     return forcefield
 
-# Base directory for resolving templates/static regardless of CWD
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 app = Flask(
     __name__,
     template_folder=os.path.join(BASE_DIR, 'templates'),
@@ -70,6 +78,9 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE  # Reduced to 16 MB for better 
 # App Engine / Cloud Run specific configuration
 app.config['EXECUTOR_TYPE'] = 'thread'
 app.config['EXECUTOR_MAX_WORKERS'] = 3  # Reduced to 3 to stay within 1GB RAM budget on Cloud Run
+# On Cloud Run request-based billing, background work after response is CPU-throttled.
+# Default to inline processing in cloud; keep async background mode for local/dev unless explicitly enabled.
+app.config['PROCESS_INLINE'] = env_flag('ATOMIPY_PROCESS_INLINE', IS_CLOUD_ENV)
 
 # Initialize Flask-Executor
 executor = Executor(app)
@@ -81,7 +92,7 @@ RESULTS_FOLDER_NAME = 'results'
 
 # Use /tmp for writable storage (standard for Google Cloud Run / App Engine)
 # In production, Cloud Run's /tmp is the only shared writable space in the container.
-if os.environ.get('K_SERVICE') or os.environ.get('GAE_ENV') or os.environ.get('GAE_INSTANCE'):
+if IS_CLOUD_ENV:
     app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
     app.config['RESULTS_FOLDER'] = '/tmp/results'
     app.config['TEMP_DIR'] = '/tmp'
@@ -648,43 +659,45 @@ def start_processing_task():  # Renamed route function
             task_id = str(uuid.uuid4())
             tasks_status[task_id] = {'status': 'Pending', 'progress': 0}
 
-            # Submit the task to the executor with a timeout
-            try:
-                # Log the task submission
-                file_size = os.path.getsize(filepath)
-                logger.info(f"Submitting task {task_id} for file {filename} ({file_size} bytes)")
-                
-                # Submit the task to the executor
-                executor.submit(
-                    process_file_task,
-                    task_id,
-                    filepath,
-                    filename,
-                    ff_type,
-                    output_formats,
-                    results_id,
-                    results_dir,
-                    generate_topology,
-                    expand_symmetry,
-                    fuse_overlaps,
-                    fuse_rmax,
-                    fuse_criteria,
-                    add_hydrogen_bvs,
-                    bvs_delta_threshold,
-                    bvs_max_additions,
-                    replicate_structure,
-                    replicate_nx,
-                    replicate_ny,
-                    replicate_nz,
-                    angle_terms,
-                    reset_molid,
-                )
-            except Exception as e:
-                logger.error(f"Error submitting task: {str(e)}")
-                raise
+            # Log the task submission
+            file_size = os.path.getsize(filepath)
+            logger.info(f"Submitting task {task_id} for file {filename} ({file_size} bytes)")
+
+            processing_args = (
+                task_id,
+                filepath,
+                filename,
+                ff_type,
+                output_formats,
+                results_id,
+                results_dir,
+                generate_topology,
+                expand_symmetry,
+                fuse_overlaps,
+                fuse_rmax,
+                fuse_criteria,
+                add_hydrogen_bvs,
+                bvs_delta_threshold,
+                bvs_max_additions,
+                replicate_structure,
+                replicate_nx,
+                replicate_ny,
+                replicate_nz,
+                angle_terms,
+                reset_molid,
+            )
+
+            # Cloud-safe mode: run heavy compute inside the request to avoid post-response CPU throttling.
+            if app.config.get('PROCESS_INLINE', False):
+                logger.info(f"Running task {task_id} inline inside request context")
+                process_file_task(*processing_args)
+                processing_mode = 'inline'
+            else:
+                executor.submit(process_file_task, *processing_args)
+                processing_mode = 'background'
 
             # Return the task ID to the client
-            return jsonify({'task_id': task_id})
+            return jsonify({'task_id': task_id, 'processing_mode': processing_mode})
         except RequestEntityTooLarge:
             flash('File too large. Maximum size allowed is 16 MB.')
             return jsonify({'error': 'File too large'}), 413
@@ -813,18 +826,13 @@ def download_zip(results_id):
 def about():
     return render_template('about.html', gemmi_available=app.config['GEMMI_AVAILABLE'])
 
-import threading
-import contextlib
-import shutil
-
 def prune_cache_loop():
     """Background thread to delete result files older than 1 hour."""
     while True:
         try:
             now = time.time()
             cutoff = now - 3600 # 1 hour
-            # We access app.config through a manual folder check since it's a global app
-            folders = [os.path.join(BASE_DIR, 'uploads'), os.path.join(BASE_DIR, 'results')]
+            folders = [app.config['UPLOAD_FOLDER'], app.config['RESULTS_FOLDER']]
             for folder in folders:
                 if os.path.exists(folder):
                     for f in os.listdir(folder):

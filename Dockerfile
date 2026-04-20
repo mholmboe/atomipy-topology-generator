@@ -20,9 +20,10 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV MALLOC_ARENA_MAX=2
 ENV OMP_NUM_THREADS=1
+ENV ATOMIPY_PROCESS_INLINE=true
 
 # Expose the default port (documentation only)
 EXPOSE 5001
 
 # Run the app using gunicorn
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --worker-class gthread --threads 2 --timeout 300 app:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --worker-class gthread --threads 2 --timeout 1800 app:app"]

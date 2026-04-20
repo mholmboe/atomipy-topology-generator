@@ -442,6 +442,16 @@
                 taskId = data.task_id;
                 progressStatus.textContent = 'Processing started. Waiting for updates...';
 
+                // Inline mode means the server kept this request open until processing completed.
+                if (data.processing_mode === 'inline') {
+                    progressBar.style.width = '100%';
+                    progressBar.setAttribute('aria-valuenow', 100);
+                    progressBar.textContent = '100%';
+                    progressStatus.textContent = 'Processing complete! Redirecting...';
+                    window.location.href = `/task_result/${taskId}`;
+                    return;
+                }
+
                 // --- Start polling for status ---
                 pollInterval = setInterval(() => {
                     fetch(`/status/${taskId}`)

@@ -56,6 +56,15 @@ Access the app at `http://localhost:5001`.
    python app.py
    ```
 
+### Processing Mode
+
+By default, the app now runs heavy topology generation **inline inside the request** on cloud platforms.
+This avoids Cloud Run CPU throttling that can happen when long jobs are started in background threads after
+the HTTP response is returned.
+
+- `ATOMIPY_PROCESS_INLINE=true` (recommended for Cloud Run)
+- `ATOMIPY_PROCESS_INLINE=false` (legacy background executor mode)
+
 ---
 
 ## 📂 Project Structure
