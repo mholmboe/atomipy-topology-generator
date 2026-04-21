@@ -134,82 +134,6 @@ def parse_int(value, default):
         return default
 
 
-def add_hydrogens_from_bvs(
-    atoms,
-    box_dim,
-    delta_threshold=DEFAULT_BVS_DELTA_THRESHOLD,
-    max_additions=DEFAULT_BVS_MAX_ADDITIONS,
-):
-    """
-    Add one H to strongly underbonded oxygen sites selected via BVS.
-
-    Returns
-    -------
-    tuple
-        (updated_atoms, added_h_count, selected_site_count)
-    """
-    if max_additions <= 0:
-        return atoms, 0, 0
-
-    bvs_report = get_ap().analyze_bvs(copy.deepcopy(atoms), box_dim, top_n=max_additions)
-    bvs_results = bvs_report.get("results", [])
-
-    candidates = []
-    for row in bvs_results:
-        element = (row.get("element") or "").upper()
-        delta = row.get("delta")
-        if element != "O" or delta is None or delta >= delta_threshold:
-            continue
-
-        idx0 = int(row.get("index", 0)) - 1
-        if idx0 < 0 or idx0 >= len(atoms):
-            continue
-
-        # Skip oxygens that are already bonded to at least one hydrogen.
-        bonded_h = False
-        for neigh_idx, *_ in row.get("bonds", []):
-            j = int(neigh_idx) - 1
-            if 0 <= j < len(atoms):
-                neigh_el = (atoms[j].get("element") or "").upper()
-                if neigh_el == "H":
-                    bonded_h = True
-                    break
-        if bonded_h:
-            continue
-
-        candidates.append((delta, idx0, row))
-
-    candidates.sort(key=lambda item: item[0])  # most negative delta first
-    candidates = candidates[:max_additions]
-
-    added_h = 0
-    for _, idx0, row in candidates:
-        if idx0 >= len(atoms):
-            continue
-
-        original_type = atoms[idx0].get("type", "O")
-        marker_type = f"__BVS_TARGET_{idx0}__"
-        atoms[idx0]["type"] = marker_type
-
-        prev_count = len(atoms)
-        cn = row.get("cn")
-        coordination_target = max(1, int(cn) + 1) if isinstance(cn, (int, float)) else 2
-        ap = get_ap()
-        atoms = ap.add_H_atom(
-            atoms,
-            box_dim,
-            target_type=marker_type,
-            h_type="H",
-            bond_length=0.98,
-            coordination=coordination_target,
-            max_h_per_atom=1,
-        )
-
-        if idx0 < len(atoms):
-            atoms[idx0]["type"] = original_type
-        added_h += max(0, len(atoms) - prev_count)
-
-    return atoms, added_h, len(candidates)
 
 # Create upload and results folders if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -298,16 +222,19 @@ def process_file_task(
                 'step': 'Protonating underbonded oxygen sites (BVS)',
                 'progress': 22,
             }
-            atoms, added_h, selected_sites = add_hydrogens_from_bvs(
+            n_before_h = len(atoms)
+            atoms = ap.add_hydrogens_bvs(
                 atoms,
                 Box_dim,
                 delta_threshold=bvs_delta_threshold,
                 max_additions=bvs_max_additions,
+                bond_length=0.98,
+                coordination=3,  # Target coordination 3 is typical for mineral surface O
             )
+            added_h = len(atoms) - n_before_h
             logger.info(
-                "BVS H-addition step (%s): selected_sites=%d, added_H=%d, delta_threshold=%.3f",
+                "BVS H-addition step (%s): added_H=%d, delta_threshold=%.3f",
                 filename,
-                selected_sites,
                 added_h,
                 bvs_delta_threshold,
             )
