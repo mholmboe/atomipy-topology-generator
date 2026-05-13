@@ -282,7 +282,7 @@ def process_file_task(
                     OTHER = [a for a in noSOL if a.get('resname') != 'MIN']
                     if MIN:
                         MIN = ap.update(MIN, molid=1)
-                    atoms = ap.update(OTHER, MIN, SOL)
+                    atoms = ap.update(MIN, OTHER, SOL)
                 except Exception as e:
                     print(f"Warning: water/ion separation failed ({e}); running minff on full system.")
 
