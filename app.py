@@ -276,6 +276,10 @@ def process_file_task(
             if reset_molid:
                 try:
                     ap = get_ap()
+                    # Tag with original index to preserve the user's custom layout order
+                    for idx, a in enumerate(atoms):
+                        a['_orig_index'] = idx
+
                     SOL, noSOL = ap.find_H2O(atoms, Box_dim)
                     noSOL = ap.assign_resname(noSOL)
                     MIN = [a for a in noSOL if a.get('resname') == 'MIN']
@@ -283,6 +287,12 @@ def process_file_task(
                     if MIN:
                         MIN = ap.update(MIN, molid=1)
                     atoms = ap.update(MIN, OTHER, SOL)
+
+                    # Restore original layout order
+                    atoms = sorted(atoms, key=lambda a: a.get('_orig_index', 0))
+                    for a in atoms:
+                        a.pop('_orig_index', None)
+                    atoms = ap.update(atoms)
                 except Exception as e:
                     print(f"Warning: water/ion separation failed ({e}); running minff on full system.")
 
