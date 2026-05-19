@@ -693,12 +693,12 @@ def xrd(atoms, Box, wavelength=1.54187, angle_step=0.02,
     if plot:
         try:
             import matplotlib.pyplot as plt
-        except ImportError:
-            raise ImportError("matplotlib is required for XRD plotting. Install atomipy[xrd] or matplotlib.")
+        except ImportError as e:
+            raise ImportError(f"matplotlib is required for XRD plotting. Install atomipy[xrd] or matplotlib. Original error: {e}") from e
         try:
             from scipy.signal import find_peaks
-        except ImportError:
-            raise ImportError("scipy is required for XRD peak picking in plot mode. Install atomipy[xrd] or scipy.")
+        except ImportError as e:
+            raise ImportError(f"scipy is required for XRD peak picking in plot mode. Install atomipy[xrd] or scipy. Original error: {e}") from e
     
     Box_dim, Cell = normalize_box(Box)
     
