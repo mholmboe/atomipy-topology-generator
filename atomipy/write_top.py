@@ -9,10 +9,81 @@ def _to_float(val, default=0.0):
     except (ValueError, TypeError): return default
 
 
+def is_solvent_or_ion(atom):
+    res = atom.get('resname', '')
+    if res is None:
+        res = ''
+    res = res.upper()
+    
+    # If the residue is a mineral residue, it is never a solvent or ion
+    solvent_ion_resnames = {
+        'SOL', 'WAT', 'HOH', 'TIP3', 'OPC', 'OPC3', 'SPC', 'SPCE', 'TIP4', 'TIP5',
+        'ION', 'NA', 'CL', 'K', 'LI', 'CS', 'RB', 'F', 'BR', 'I', 'CA', 'MG', 'ZN',
+        'NA+', 'CL-', 'CL−', 'K+', 'LI+', 'CS+', 'RB+', 'F-', 'F−', 'BR-', 'BR−',
+        'I-', 'I−', 'CA2+', 'MG2+', 'ZN2+'
+    }
+    if res and res not in solvent_ion_resnames:
+        return False
+
+    atype = atom.get('type', '')
+    if atype is None:
+        atype = ''
+    atype = atype.upper()
+    
+    element = atom.get('element', '')
+    if element is None:
+        element = ''
+    element = element.upper()
+    
+    # Standard water/solvent resnames
+    if res in ('SOL', 'WAT', 'HOH', 'TIP3', 'OPC', 'OPC3', 'SPC', 'SPCE', 'TIP4', 'TIP5'):
+        return True
+        
+    # Standard ion resnames
+    if res in ('ION', 'NA', 'CL', 'K', 'LI', 'CS', 'RB', 'F', 'BR', 'I', 'CA', 'MG', 'ZN', 'NA+', 'CL-', 'CL−', 'K+', 'LI+', 'CS+', 'RB+', 'F-', 'F−', 'BR-', 'BR−', 'I-', 'I−', 'CA2+', 'MG2+', 'ZN2+'):
+        return True
+        
+    # Standard water atom types
+    if atype in ('OW', 'HW', 'HW1', 'HW2', 'MW', 'HW_1', 'HW_2'):
+        return True
+        
+    # Standard ion atom types/elements (when resname is ION or similar)
+    if res == 'ION' or element in ('NA', 'CL', 'K', 'LI', 'CS', 'RB', 'F', 'BR', 'I', 'CA', 'MG', 'ZN'):
+        return True
+        
+    return False
+
+
+def get_gromacs_molname(resname, atom_type, element, water_model='spce'):
+    if not resname:
+        resname = ''
+    res = resname.upper()
+    
+    if not atom_type:
+        atom_type = ''
+    atype = atom_type.upper()
+    
+    if not element:
+        element = ''
+    elem = element.upper()
+    
+    if res in ('SOL', 'WAT', 'HOH', 'TIP3', 'OPC', 'OPC3', 'SPC', 'SPCE', 'TIP4', 'TIP5') or atype in ('OW', 'HW', 'HW1', 'HW2', 'MW'):
+        return 'SOL'
+        
+    # Standard ion mapping
+    for ion_name in ('NA', 'CL', 'K', 'LI', 'CS', 'RB', 'F', 'BR', 'I', 'CA', 'MG', 'ZN'):
+        if res.startswith(ion_name) or atype.startswith(ion_name) or elem == ion_name:
+            # Return proper capitalization
+            return ion_name.capitalize()
+            
+    # For mineral/other molecules, return resname or standard default
+    return resname[:3].upper() if resname else 'MOL'
+
+
 def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=None, 
           rmaxH=1.2, rmaxM=2.45, explicit_bonds=0, explicit_angles=1, KANGLE=500,
           detect_bimodal=False, bimodal_threshold=30.0, max_angle=None,
-          as_top=False, prm_path=None):
+          as_top=False, prm_path=None, split_system=False, water_model='spce'):
     """
     Write atoms to a Gromacs molecular topology (.itp) file or a full system topology (.top) file.
     
@@ -38,6 +109,8 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
                    Angles above this value will be excluded.
         as_top: If True, write a full system .top file instead of include .itp (default: False).
         prm_path: Path to forcefield parameter file (optional, used to parse nonbonded parameters for [ atomtypes ]).
+        split_system: If True, split system into a mineral .itp and include statements in .top (default: False).
+        water_model: Name of standard water model to include, e.g. 'spce', 'opc3', 'tip3p' (default: 'spce').
         
     Returns:
         None
@@ -54,6 +127,140 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
     else:
         if not file_path.endswith('.itp'):
             file_path = file_path + '.itp'
+            
+    # If split_system is True and as_top is True, split the system
+    if split_system and as_top:
+        import os
+        # 1. Separate mineral and solvent/ion atoms
+        mineral_atoms = [atom for atom in atoms if not is_solvent_or_ion(atom)]
+        solvent_or_ion_atoms = [atom for atom in atoms if is_solvent_or_ion(atom)]
+        
+        # Dynamically assign correct contiguous molids to ensure they never lump together
+        for a in mineral_atoms:
+            a['molid'] = 1
+            
+        curr_molid = 2
+        prev_resname = None
+        prev_resnum = None
+        for a in solvent_or_ion_atoms:
+            resname = a.get('resname', 'SOL')
+            resnum = a.get('resnum', 1)
+            if resname != prev_resname or resnum != prev_resnum:
+                curr_molid += 1
+                prev_resname = resname
+                prev_resnum = resnum
+            a['molid'] = curr_molid
+            
+        # Re-construct atoms list in the exact reordered order (mineral first, then solvent/ions)
+        atoms = mineral_atoms + solvent_or_ion_atoms
+        
+        # Determine paths
+        dir_name = os.path.dirname(file_path)
+        base_name = os.path.basename(file_path)
+        mineral_itp_name = base_name.replace('.top', '_mineral.itp')
+        mineral_itp_path = os.path.join(dir_name, mineral_itp_name) if dir_name else mineral_itp_name
+        
+        # 2. Write mineral itp if mineral_atoms exist
+        has_mineral = len(mineral_atoms) > 0
+        if has_mineral:
+            # We must re-index mineral atoms contiguous starting from 1
+            mineral_atoms_copy = []
+            for idx, atom in enumerate(mineral_atoms, 1):
+                atom_copy = atom.copy()
+                atom_copy['index'] = idx
+                mineral_atoms_copy.append(atom_copy)
+                
+            # Recursively call itp for the mineral atoms
+            itp(mineral_atoms_copy, Box=Box, file_path=mineral_itp_path, molecule_name="MIN",
+                nrexcl=nrexcl, comment=comment, rmaxH=rmaxH, rmaxM=rmaxM,
+                explicit_bonds=explicit_bonds, explicit_angles=explicit_angles, KANGLE=KANGLE,
+                detect_bimodal=detect_bimodal, bimodal_threshold=bimodal_threshold, max_angle=max_angle,
+                as_top=False, prm_path=prm_path, split_system=False)
+                
+        # 3. Write full system .top file with includes
+        # Count molecules sequentially
+        mol_groups = []
+        current_molid = None
+        current_group = []
+        for atom in atoms:
+            molid = atom.get('molid', 1)
+            if current_molid is None:
+                current_molid = molid
+                current_group = [atom]
+            elif molid == current_molid:
+                current_group.append(atom)
+            else:
+                mol_groups.append((current_molid, current_group))
+                current_molid = molid
+                current_group = [atom]
+        if current_group:
+            mol_groups.append((current_molid, current_group))
+            
+        mol_counts = []
+        for molid, group in mol_groups:
+            first_atom = group[0]
+            is_sol = all(is_solvent_or_ion(a) for a in group)
+            if not is_sol:
+                molname = "MIN"
+            else:
+                molname = get_gromacs_molname(first_atom.get('resname', ''), first_atom.get('type', ''), first_atom.get('element', ''), water_model=water_model)
+            
+            if not mol_counts or mol_counts[-1][0] != molname:
+                mol_counts.append([molname, 1])
+            else:
+                mol_counts[-1][1] += 1
+                
+        # Write .top
+        total_charge = sum(_to_float(atom.get('charge', 0.0)) for atom in atoms)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write("; Gromacs system topology file (split system)\n")
+            f.write(f"; File generated by atomipy on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"; Total charge of the system is {total_charge:.6f}\n\n")
+            
+            f.write("; Include forcefield parameters\n")
+            f.write('#include "min.ff/forcefield.itp"\n\n')
+            
+            if has_mineral:
+                f.write("; Include mineral topology\n")
+                f.write(f'#include "{mineral_itp_name}"\n\n')
+                
+            has_water = any(get_gromacs_molname(a.get('resname', ''), a.get('type', ''), a.get('element', ''), water_model=water_model) == 'SOL' for a in solvent_or_ion_atoms)
+            if has_water:
+                f.write("; Include water topology\n")
+                # map water_model to filename
+                wm = water_model.lower()
+                if wm == 'spc':
+                    wm = 'spc'
+                elif wm == 'spce':
+                    wm = 'spce'
+                elif wm == 'opc3':
+                    wm = 'opc3'
+                elif wm == 'opc':
+                    wm = 'opc'
+                elif wm == 'tip3p':
+                    wm = 'tip3p'
+                elif wm == 'tip4p':
+                    wm = 'tip4p'
+                else:
+                    wm = 'spce' # fallback
+                f.write(f'#include "min.ff/{wm}.itp"\n\n')
+                
+            has_ions = any(get_gromacs_molname(a.get('resname', ''), a.get('type', ''), a.get('element', ''), water_model=water_model) != 'SOL' for a in solvent_or_ion_atoms)
+            if has_ions:
+                f.write("; Include ions topology\n")
+                f.write('#include "min.ff/ions.itp"\n\n')
+                
+            f.write("[ system ]\n")
+            f.write("; name\n")
+            f.write(f"{molecule_name or 'System'} (Split System)\n\n")
+            
+            f.write("[ molecules ]\n")
+            f.write("; name             number\n")
+            for name, count in mol_counts:
+                f.write(f"{name:<18} {count}\n")
+                
+        print(f"write_top: Successfully wrote split topology system.top ({len(mol_counts)} molecule groups) and mineral itp.")
+        return None
     
     nAtoms = len(atoms)
     
@@ -418,7 +625,8 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
 
 def top(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=None, 
         rmaxH=1.2, rmaxM=2.45, explicit_bonds=0, explicit_angles=1, KANGLE=500,
-        detect_bimodal=False, bimodal_threshold=30.0, max_angle=None, prm_path=None):
+        detect_bimodal=False, bimodal_threshold=30.0, max_angle=None, prm_path=None,
+        split_system=False, water_model='spce'):
     """
     Write atoms to a complete, self-contained Gromacs system topology (.top) file.
     
@@ -430,7 +638,7 @@ def top(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
                explicit_bonds=explicit_bonds, explicit_angles=explicit_angles, 
                KANGLE=KANGLE, detect_bimodal=detect_bimodal, 
                bimodal_threshold=bimodal_threshold, max_angle=max_angle,
-               as_top=True, prm_path=prm_path)
+               as_top=True, prm_path=prm_path, split_system=split_system, water_model=water_model)
 
 
 def psf(atoms, Box=None, file_path=None, segid=None, rmaxH=1.2, rmaxM=2.45, 
