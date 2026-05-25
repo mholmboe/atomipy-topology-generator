@@ -46,11 +46,11 @@ sys.path.insert(0, BASE_DIR)
 # Cloud environment detection and env-flag parser used during app startup.
 IS_CLOUD_ENV = bool(os.environ.get('K_SERVICE') or os.environ.get('GAE_ENV') or os.environ.get('GAE_INSTANCE'))
 
-def env_flag(name, default):
+def env_flag(name: str, default: bool) -> bool:
     value = os.environ.get(name)
     if value is None:
         return default
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 # Lazy loader for atomipy to reduce initial memory footprint
 _ap = None
@@ -522,7 +522,7 @@ def start_processing_task():  # Renamed route function
         flash('No selected file')
         return jsonify({'error': 'No selected file'}), 400  # Return JSON error
 
-    if file and allowed_file(file.filename):
+    if file and file.filename and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         base_filename = filename.rsplit('.', 1)[0]
         file_extension = filename.rsplit('.', 1)[1].lower()
@@ -652,8 +652,8 @@ def start_processing_task():  # Renamed route function
             if os.path.exists(results_dir):
                 try:
                     shutil.rmtree(results_dir)
-                except OSError as e:
-                    print(f"Error removing directory {results_dir}: {e}")
+                except OSError as err:
+                    print(f"Error removing directory {results_dir}: {err}")
             return jsonify({'error': f'An error occurred preparing the task: {e}'}), 500
 
     else:
