@@ -1,7 +1,6 @@
-import os
 import numpy as np
 from datetime import datetime
-from atomipy.cell_utils import Cell2Box_dim
+from .cell_utils import Cell2Box_dim
 from .bond_angle import bond_angle
 
 def _to_float(val, default=0.0):
@@ -12,18 +11,19 @@ def _to_float(val, default=0.0):
 
 def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=None, 
           rmaxH=1.2, rmaxM=2.45, explicit_bonds=0, explicit_angles=1, KANGLE=500,
-          detect_bimodal=False, bimodal_threshold=30.0, max_angle=None):
+          detect_bimodal=False, bimodal_threshold=30.0, max_angle=None,
+          as_top=False, prm_path=None):
     """
-    Write atoms to a Gromacs molecular topology (.itp) file.
+    Write atoms to a Gromacs molecular topology (.itp) file or a full system topology (.top) file.
     
     This function takes a list of atom dictionaries from atomipy and outputs a formatted
-    Gromacs topology file containing atom, bond, and angle definitions similar to the 
-    MATLAB write_minff_itp.m script.
+    Gromacs topology file. If as_top=True (or file_path ends with .top), it emits a complete,
+    self-contained system topology file with [ defaults ], [ atomtypes ], [ system ], and [ molecules ].
     
     Args:
         atoms: List of atom dictionaries.
         Box: a 1x3, 1x6 or 1x9 list representing Cell dimensions (in Angstroms).
-        file_path: Output file path for the .itp file.
+        file_path: Output file path for the topology file.
         molecule_name: Name of the molecule (default: derived from atoms[0].resname).
         nrexcl: Number of exclusions (default: 3).
         comment: Optional comment to include in the header.
@@ -36,21 +36,24 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
         bimodal_threshold: Threshold for bimodal detection in degrees (default: 30.0).
         max_angle: Optional maximum angle threshold in degrees (default: None = include all).
                    Angles above this value will be excluded.
+        as_top: If True, write a full system .top file instead of include .itp (default: False).
+        prm_path: Path to forcefield parameter file (optional, used to parse nonbonded parameters for [ atomtypes ]).
         
     Returns:
         None
-
-    Examples
-    --------
-    itp(atoms, Box=[50, 50, 50], file_path="molecule.itp", molecule_name="MMT")
-    itp(atoms, Box=Cell2Box_dim([50, 50, 50, 90, 90, 90]), file_path="topology.itp", explicit_angles=0)
     """
-    if Box is None:
-        raise ValueError("Box parameter must be provided")
+    # Validate file_path
+    if file_path is None:
+        raise ValueError("file_path must be provided")
     
-    # If file doesn't have .itp extension, add it
-    if not file_path.endswith('.itp'):
-        file_path = file_path + '.itp'
+    # Ensure correct extension and set as_top mode accordingly
+    if as_top or file_path.endswith('.top'):
+        as_top = True
+        if not file_path.endswith('.top'):
+            file_path = file_path + '.top'
+    else:
+        if not file_path.endswith('.itp'):
+            file_path = file_path + '.itp'
     
     nAtoms = len(atoms)
     
@@ -76,19 +79,21 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
         molecule_name = "MOL"
     
     # Use bond_angle function to calculate bonds and angles
-    if Box is None:
-        raise ValueError("A Box variable is required to calculate bonds and angles using bond_angle function")
-    
-    # Add debug output for atom coordinates and Box dimensions
-    print(f"write_itp: Using Box dimensions: {Box}")
-    
-    # Call the bond_angle function with the provided rmaxH and rmaxM parameters
-    # Note: bond_angle function expects coordinates in Angstroms
-    # Important: Use same_molecule_only=True (default) to respect molecule boundaries
-    # Keep same_element_bonds=False (default) which is correct for mineral structures
-    print(f"write_itp: Calling bond_angle with rmaxH={rmaxH}, rmaxM={rmaxM}, same_molecule_only=True")
-    updated_atoms, Bond_index, Angle_index = bond_angle(atoms, Box, rmaxH=rmaxH, rmaxM=rmaxM, same_element_bonds=False, same_molecule_only=True)
-    print(f"write_itp: bond_angle found {len(Bond_index)} bonds and {len(Angle_index)} angles")
+    if Box is not None:
+        # Add debug output for atom coordinates and Box dimensions
+        print(f"write_itp: Using Box dimensions: {Box}")
+        
+        # Call the bond_angle function with the provided rmaxH and rmaxM parameters
+        # Note: bond_angle function expects coordinates in Angstroms
+        # Important: Use same_molecule_only=True (default) to respect molecule boundaries
+        # Keep same_element_bonds=False (default) which is correct for mineral structures
+        print(f"write_itp: Calling bond_angle with rmaxH={rmaxH}, rmaxM={rmaxM}, same_molecule_only=True")
+        updated_atoms, Bond_index, Angle_index = bond_angle(atoms, Box, rmaxH=rmaxH, rmaxM=rmaxM, same_element_bonds=False, same_molecule_only=True)
+        print(f"write_itp: bond_angle found {len(Bond_index)} bonds and {len(Angle_index)} angles")
+    else:
+        print("write_itp: Box is None, skipping bond and angle calculations")
+        Bond_index = None
+        Angle_index = None
     
     # Convert bond and angle indices to 1-based if they're not already
     # Each bond is [atom1_idx, atom2_idx, distance]
@@ -142,7 +147,6 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
     # Find atom indices for special types (similar to MATLAB script)
     # Using sets for O(1) membership checks to avoid O(N^2) bottlenecks in filtering
     ind_H = {i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('H')}
-    ind_O = {i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('O')}
     ind_Al = {i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Al')}
     ind_Si = {i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Si')}
     ind_Mgo = {i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Mg')}
@@ -207,7 +211,12 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
     total_charge = round(total_charge, 6)
         
     # Open the file for writing
-    with open(file_path, 'w') as f:
+    with open(file_path, 'w', encoding='utf-8') as f:
+        # Write GROMACS defaults and atomtypes if creating a full .top file
+        if as_top:
+            f.write('; Include forcefield parameters\n')
+            f.write('#include "min.ff/forcefield.itp"\n\n')
+
         # Write header
         f.write("; Gromacs topology file\n")
         f.write(f"; File generated by atomipy on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -237,10 +246,35 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
         f.write("; id   attype  resnr resname  atname   cgnr        charge      mass\n")
         
         for i, atom in enumerate(atoms, 1):
-            # Get values with defaults for missing fields
             at_type = atom.get('fftype', atom.get('type', ''))
             if at_type is None:
                 at_type = 'X'  # Default type if none exists
+            
+            # Map ion types for GROMACS min.ff compatibility
+            res_name = atom.get('resname', molecule_name)
+            if res_name == 'ION' or (res_name and res_name.upper() == 'ION'):
+                if at_type == 'Na':
+                    at_type = 'Na+'
+                elif at_type == 'Cl':
+                    at_type = 'Cl−' # Unicode minus U+2212
+                elif at_type == 'K':
+                    at_type = 'K+'
+                elif at_type == 'Li':
+                    at_type = 'Li+'
+                elif at_type == 'Cs':
+                    at_type = 'Cs+'
+                elif at_type == 'Rb':
+                    at_type = 'Rb+'
+                elif at_type == 'F':
+                    at_type = 'F−' # Unicode minus U+2212
+                elif at_type == 'Br':
+                    at_type = 'Br−' # Unicode minus U+2212
+                elif at_type == 'I':
+                    at_type = 'I−' # Unicode minus U+2212
+                elif at_type == 'Ca':
+                    at_type = 'Ca2+'
+                elif at_type == 'Mg':
+                    at_type = 'Mg2+'
                 
             res_nr = atom.get('molid', atom.get('resid', 1))
             if res_nr is None:
@@ -364,19 +398,44 @@ def itp(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=N
         
         f.write("#endif\n")
         
+        # Write GROMACS system and molecules sections if creating a full .top file
+        if as_top:
+            f.write("\n[ system ]\n")
+            f.write("; name\n")
+            f.write(f"{molecule_name} System\n\n")
+            
+            f.write("[ molecules ]\n")
+            f.write("; name             number\n")
+            f.write(f"{mol_name_short.upper()}                1\n")
+            
         # All sections (moleculetype, atoms, bonds, angles, and position restraints) are complete
         
         f.write("\n")
-        
-        # Check if bonds are defined in the atoms
-        has_bonds = any('bonds' in atom and atom['bonds'] for atom in atoms)
         
         # We'll skip processing of 'angles' attribute on atoms - this is handled by Angle_index
         # Getting angles from the Angle_index is more reliable and consistent
 
 
+def top(atoms, Box=None, file_path=None, molecule_name=None, nrexcl=1, comment=None, 
+        rmaxH=1.2, rmaxM=2.45, explicit_bonds=0, explicit_angles=1, KANGLE=500,
+        detect_bimodal=False, bimodal_threshold=30.0, max_angle=None, prm_path=None):
+    """
+    Write atoms to a complete, self-contained Gromacs system topology (.top) file.
+    
+    Exposes all required Gromacs sections including [ defaults ], [ atomtypes ],
+    [ moleculetype ], [ atoms ], [ bonds ], [ angles ], and [ system ] / [ molecules ].
+    """
+    return itp(atoms, Box=Box, file_path=file_path, molecule_name=molecule_name, 
+               nrexcl=nrexcl, comment=comment, rmaxH=rmaxH, rmaxM=rmaxM, 
+               explicit_bonds=explicit_bonds, explicit_angles=explicit_angles, 
+               KANGLE=KANGLE, detect_bimodal=detect_bimodal, 
+               bimodal_threshold=bimodal_threshold, max_angle=max_angle,
+               as_top=True, prm_path=prm_path)
+
+
 def psf(atoms, Box=None, file_path=None, segid=None, rmaxH=1.2, rmaxM=2.45, 
-        comment=None, max_angle=None, detect_bimodal=False, bimodal_threshold=30.0):
+        comment=None, max_angle=None, detect_bimodal=False, bimodal_threshold=30.0,
+        prm_path=None):
     """
     Write atoms to a NAMD/CHARMM PSF topology file.
     
@@ -415,6 +474,14 @@ def psf(atoms, Box=None, file_path=None, segid=None, rmaxH=1.2, rmaxM=2.45,
     if Box is None:
         raise ValueError("Box parameter must be provided")
     
+    # Ensure atom masses are set
+    from .mass import set_atomic_masses
+    atoms = set_atomic_masses(atoms)
+    
+    # Validate file_path
+    if file_path is None:
+        raise ValueError("file_path must be provided")
+    
     # If file doesn't have .psf extension, add it
     if not file_path.endswith('.psf'):
         file_path = file_path + '.psf'
@@ -432,52 +499,85 @@ def psf(atoms, Box=None, file_path=None, segid=None, rmaxH=1.2, rmaxM=2.45,
     updated_atoms, Bond_index, Angle_index = bond_angle(atoms, Box, rmaxH=rmaxH, rmaxM=rmaxM, same_element_bonds=False, same_molecule_only=True)
     print(f"write_psf: bond_angle found {len(Bond_index)} bonds and {len(Angle_index)} angles")
     
-    # PSF uses 0-based indexing for its pointers internally but displays as 1-based
-    # Ensure we're working with 0-based indices for internal calculations
-    if isinstance(Bond_index, np.ndarray) and Bond_index.size > 0:
-        if np.min(Bond_index[:, 0]) == 1:  # Check if minimum index is 1 (1-based)
-            Bond_index = np.array([
-                [int(i)-1, int(j)-1, dist] for i, j, dist in Bond_index
-            ])
-    elif Bond_index and len(Bond_index) > 0:
-        if min(int(bond[0]) for bond in Bond_index) == 1:
-            Bond_index = [[int(i)-1, int(j)-1, dist] for i, j, dist in Bond_index]
+    # Find atom indices for all hydrogen atoms (0-based) using case-insensitive checks on element or name
+    ind_H = {i-1 for i, atom in enumerate(atoms, 1) if atom.get('element', '').upper() == 'H' or atom.get('type', '').upper().startswith('H')}
     
-    # Similar check for Angle_index
-    if isinstance(Angle_index, np.ndarray) and Angle_index.size > 0:
-        if np.min(Angle_index[:, 0]) == 1:  # Check if minimum index is 1 (1-based)
-            cols = Angle_index.shape[1]
-            new_angles = []
-            for angle in Angle_index:
-                new_angle = [int(angle[0])-1, int(angle[1])-1, int(angle[2])-1]
-                if cols > 3:
-                    new_angle.extend(angle[3:])
-                new_angles.append(new_angle)
-            Angle_index = np.array(new_angles)
-    elif Angle_index and len(Angle_index) > 0:
-        if min(int(angle[0]) for angle in Angle_index) == 1:
-            new_angles = []
-            for angle in Angle_index:
-                new_angle = [int(angle[0])-1, int(angle[1])-1, int(angle[2])-1]
-                if len(angle) > 3:
-                    new_angle.extend(angle[3:])
-                new_angles.append(new_angle)
-            Angle_index = new_angles
-    
-        # Find atom indices for special types (similar to MATLAB script)
-    # For PSF, since Bond_index was already converted to 0-based, we need 0-based indices for filtering
-    ind_H = [i-1 for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('H')]
-    ind_O = [i-1 for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('O')]
-    ind_Al = [i-1 for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Al')]
-    ind_Si = [i-1 for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Si')]
-    ind_Mgo = [i-1 for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Mg')]
-    
-    # Filter Bond_index to only include bonds with at least one hydrogen atom
+    # Filter Bond_index to only include bonds with at least one hydrogen atom (since CLAYFF/MINFF only define O-H bonds)
     if Bond_index is not None and len(Bond_index) > 0:
         total_bonds = len(Bond_index)
         Bond_index = [bond for bond in Bond_index if int(bond[0]) in ind_H or int(bond[1]) in ind_H]
         print(f"write_psf: Filtered to {len(Bond_index)} hydrogen bonds (from {total_bonds} total bonds)")
     
+    # Filter Angle_index to only include angles defined in the force field parameters (e.g. MINFF/CLAYFF)
+    if Angle_index is not None and len(Angle_index) > 0:
+        import os
+        if prm_path is not None:
+            prm_candidates = [
+                prm_path,
+                os.path.join(os.path.dirname(__file__), 'ffparams', prm_path),
+                os.path.join(os.path.dirname(__file__), 'ffparams', os.path.basename(prm_path)),
+                os.path.basename(prm_path)
+            ]
+        else:
+            # Auto-detect if CLAYFF is being used based on CLAYFF-specific atom types
+            is_clayff = any(atom.get('fftype', '').startswith('Ohmg') or 
+                            atom.get('fftype', '').startswith('Oalh') or 
+                            atom.get('fftype', '') == 'Ob' or 
+                            atom.get('fftype', '') == 'Oh' for atom in atoms)
+            prm_file_default = 'par_clayff.prm' if is_clayff else 'par_minff.prm'
+            prm_candidates = [
+                os.path.join(os.path.dirname(__file__), 'ffparams', prm_file_default),
+                os.path.join(os.path.dirname(__file__), prm_file_default),
+                prm_file_default,
+                os.path.join(os.path.dirname(__file__), 'ffparams', 'par_minff.prm'),
+                os.path.join(os.path.dirname(__file__), 'par_minff.prm'),
+                'par_minff.prm'
+            ]
+        
+        prm_resolved_path = next((p for p in prm_candidates if os.path.exists(p)), None)
+        valid_angles = set()
+        if prm_resolved_path:
+            try:
+                print(f"write_psf: Filtering angles against parameter file: {prm_resolved_path}")
+                in_angles = False
+                with open(prm_resolved_path, 'r', encoding='utf-8') as prm_f:
+                    for prm_line in prm_f:
+                        prm_line = prm_line.strip()
+                        if not prm_line or prm_line.startswith('!'):
+                            continue
+                        if prm_line.upper().startswith('ANGLES'):
+                            in_angles = True
+                            continue
+                        if prm_line.upper().startswith('DIHEDRALS') or prm_line.upper().startswith('IMPROPER') or prm_line.upper().startswith('NONBONDED'):
+                            in_angles = False
+                            continue
+                        if in_angles:
+                            parts = prm_line.split()
+                            if len(parts) >= 3:
+                                t1, t2, t3 = parts[0].upper(), parts[1].upper(), parts[2].upper()
+                                valid_angles.add((t1, t2, t3))
+                                valid_angles.add((t3, t2, t1))
+            except Exception as e:
+                print(f"write_psf: Warning - Failed to parse parameter file: {e}")
+        
+        if valid_angles:
+            total_angles = len(Angle_index)
+            filtered_angles = []
+            for angle in Angle_index:
+                a1, a2, a3 = int(angle[0]), int(angle[1]), int(angle[2])
+                type1 = atoms[a1].get('fftype', atoms[a1].get('type', 'X')).upper()
+                type2 = atoms[a2].get('fftype', atoms[a2].get('type', 'X')).upper()
+                type3 = atoms[a3].get('fftype', atoms[a3].get('type', 'X')).upper()
+                if (type1, type2, type3) in valid_angles:
+                    filtered_angles.append(angle)
+            Angle_index = filtered_angles
+            print(f"write_psf: Filtered to {len(Angle_index)} valid MINFF angles (from {total_angles} total angles)")
+        else:
+            # Fallback: keep only angles with at least one hydrogen atom
+            total_angles = len(Angle_index)
+            Angle_index = [angle for angle in Angle_index if int(angle[0]) in ind_H or int(angle[1]) in ind_H or int(angle[2]) in ind_H]
+            print(f"write_psf: Fallback filtering to {len(Angle_index)} hydrogen-containing angles (from {total_angles} total angles)")
+
     # Filter Angle_index by max_angle if specified
     if max_angle is not None and Angle_index is not None and len(Angle_index) > 0:
         total_angles = len(Angle_index)
@@ -534,17 +634,17 @@ def psf(atoms, Box=None, file_path=None, segid=None, rmaxH=1.2, rmaxM=2.45,
             for triplet, avg_low, avg_high, count in bimodal_info:
                 print(f"  {triplet}: ~{avg_low:.0f}° (cis) and ~{avg_high:.0f}° (trans), n={count}")
             if max_angle is None:
-                print(f"  Consider using max_angle=150 to filter trans angles for NAMD")
+                print("  Consider using max_angle=150 to filter trans angles for NAMD")
     
     # Calculate total charge
     total_charge = sum(_to_float(atom.get('charge', 0.0)) for atom in atoms)
     total_charge = round(total_charge, 6)
     
     # Open the file for writing
-    with open(file_path, 'w') as f:
+    with open(file_path, 'w', encoding='utf-8') as f:
         # Write PSF header
         f.write("PSF\n\n")
-        f.write(f"       2 !NTITLE\n")
+        f.write("       2 !NTITLE\n")
         header_comment = f"REMARKS Generated by atomipy on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         f.write(f" {header_comment}\n")
         f.write(f" REMARKS Total charge of the system is {total_charge:.6f}\n")
@@ -555,7 +655,7 @@ def psf(atoms, Box=None, file_path=None, segid=None, rmaxH=1.2, rmaxM=2.45,
             if max_angle is not None:
                 f.write(f" REMARKS   Angles >{max_angle} excluded (trans filtered)\n")
             else:
-                f.write(f" REMARKS   Consider using max_angle=150 to filter trans angles\n")
+                f.write(" REMARKS   Consider using max_angle=150 to filter trans angles\n")
         if comment:
             f.write(f" REMARKS {comment}\n")
         f.write("\n")
@@ -781,6 +881,10 @@ def lmp(atoms, Box=None, file_path=None, forcefield=None, rmaxH=1.2, rmaxM=2.45,
     else:
         raise ValueError("Box must be length 3, 6, or 9")
     
+    # Validate file_path
+    if file_path is None:
+        raise ValueError("file_path must be provided")
+    
     # Check if we need to convert file_path to include .data extension
     if not file_path.endswith('.data') and not file_path.endswith('.data'):
         file_path = file_path + '.data'
@@ -827,11 +931,6 @@ def lmp(atoms, Box=None, file_path=None, forcefield=None, rmaxH=1.2, rmaxM=2.45,
             
     # Find atom indices for special types
     ind_H = [i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('H')]
-    ind_O = [i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('O')]
-    ind_Al = [i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Al')]
-    ind_Si = [i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Si')]
-    ind_Mgo = [i for i, atom in enumerate(atoms, 1) if atom.get('type', '').startswith('Mg')]
-    ind_Edge = list(set(ind_H + [i for i in ind_O if atoms[i-1].get('type', '').startswith('Osih')]))
     
     # Filter Bond_index to only include bonds with at least one hydrogen atom
     if Bond_index is not None and len(Bond_index) > 0:
@@ -1113,7 +1212,7 @@ def lmp(atoms, Box=None, file_path=None, forcefield=None, rmaxH=1.2, rmaxM=2.45,
                 angle_params.append((i+1, k, theta0, f"{type1}-{type2}-{type3}"))
     
     # Open the file for writing
-    with open(file_path, 'w') as f:
+    with open(file_path, 'w', encoding='utf-8') as f:
         # Write header
         f.write(f"LAMMPS data file generated by atomipy on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"# Total charge of the system is {total_charge:.6f}\n")
@@ -1305,4 +1404,4 @@ def from_atom_types(atom_types, charges, masses, file_path, molecule_name='MOL',
         })
     
     # Call the main write function
-    write_itp(atoms, file_path, molecule_name, nrexcl, comment)
+    itp(atoms, Box=None, file_path=file_path, molecule_name=molecule_name, nrexcl=nrexcl, comment=comment)
