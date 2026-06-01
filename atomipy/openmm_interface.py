@@ -81,13 +81,133 @@ def load_minff_into_openmm(
         nonbonded_method = app.PME
     defines_dict = _normalize_defines(defines)
 
-    gro = app.GromacsGroFile(gro_path)
-    top = app.GromacsTopFile(
-        top_path,
-        periodicBoxVectors=gro.getPeriodicBoxVectors(),
-        includeDir=include_dir,
-        defines=defines_dict,
-    )
+    if gro_path.lower().endswith('.pdb'):
+        coord_file = app.PDBFile(gro_path)
+        positions = coord_file.positions
+        box_vectors = coord_file.topology.getPeriodicBoxVectors()
+    else:
+        coord_file = app.GromacsGroFile(gro_path)
+        positions = coord_file.positions
+        box_vectors = coord_file.getPeriodicBoxVectors()
+    water_o, water_h = 'OW_opc3', 'HW_opc3'
+    for d in defines_dict:
+        d_upper = d.upper()
+        if 'SPCE' in d_upper:
+            water_o, water_h = 'OW_spce', 'HW_spce'
+            break
+        elif 'SPC' in d_upper:
+            water_o, water_h = 'OW_spc', 'HW_spc'
+            break
+        elif 'TIP3P' in d_upper:
+            water_o, water_h = 'OW_tip3p', 'HW_tip3p'
+            break
+        elif 'TIP4P' in d_upper:
+            water_o, water_h = 'OW_tip4p', 'HW_tip4p'
+            break
+        elif 'OPC3' in d_upper:
+            water_o, water_h = 'OW_opc3', 'HW_opc3'
+            break
+        elif 'OPC' in d_upper:
+            water_o, water_h = 'OW_opc', 'HW_opc'
+            break
+
+    water_bond_angles = """
+[ bondtypes ]
+OW_opc3 HW_opc3  1   0.097888  502416.0
+HW_opc3 OW_opc3  1   0.097888  502416.0
+OW_spce HW_spce  1   0.100000  502416.0
+HW_spce OW_spce  1   0.100000  502416.0
+OW_spc  HW_spc   1   0.100000  502416.0
+HW_spc  OW_spc   1   0.100000  502416.0
+OW_tip3p HW_tip3p 1  0.095720  502416.0
+HW_tip3p OW_tip3p 1  0.095720  502416.0
+OW_tip4p HW_tip4p 1  0.095720  502416.0
+HW_tip4p OW_tip4p 1  0.095720  502416.0
+
+[ angletypes ]
+HW_opc3 OW_opc3 HW_opc3  1  109.47  628.02
+HW_spce OW_spce HW_spce  1  109.47  628.02
+HW_spc  OW_spc  HW_spc   1  109.47  628.02
+HW_tip3p OW_tip3p HW_tip3p 1 104.52  628.02
+HW_tip4p OW_tip4p HW_tip4p 1 104.52  628.02
+"""
+
+    is_clayff_2004 = any('CLAYFF_2004' in d.upper() for d in defines_dict)
+
+    class TextFileWrapper:
+        def __init__(self, f, is_ffbonded=False, is_clayff_2004=False):
+            self.f = f
+            self.is_ffbonded = is_ffbonded
+            self.is_clayff_2004 = is_clayff_2004
+            self.appended = False
+        def read(self, *args, **kwargs):
+            content = self.f.read(*args, **kwargs)
+            if self.is_ffbonded and not self.appended:
+                content += water_bond_angles
+                self.appended = True
+            return self._translate(content)
+        def readline(self, *args, **kwargs):
+            content = self.f.readline(*args, **kwargs)
+            if self.is_ffbonded and not content and not self.appended:
+                content = water_bond_angles
+                self.appended = True
+            return self._translate(content)
+        def __iter__(self):
+            for line in self.f:
+                yield self._translate(line)
+            if self.is_ffbonded and not self.appended:
+                self.appended = True
+                for line in water_bond_angles.strip().split('\n'):
+                    yield line + '\n'
+        def _translate(self, text):
+            if not text:
+                return text
+            for w in [' ', '\t']:
+                for e in [' ', '\t', '\n']:
+                    text = text.replace(f'{w}Ow{e}', f'{w}{water_o}{e}')
+                    text = text.replace(f'{w}Hw{e}', f'{w}{water_h}{e}')
+                    text = text.replace(f'{w}Na{e}', f'{w}Na+{e}')
+                    text = text.replace(f'{w}Cl{e}', f'{w}Cl−{e}')
+                    if self.is_clayff_2004:
+                        text = text.replace(f'{w}Alo{e}', f'{w}ao{e}')
+                        text = text.replace(f'{w}Sit{e}', f'{w}st{e}')
+                        text = text.replace(f'{w}H{e}', f'{w}ho{e}')
+                        text = text.replace(f'{w}Oh{e}', f'{w}oh{e}')
+                        text = text.replace(f'{w}Ob{e}', f'{w}ob{e}')
+                        text = text.replace(f'{w}Op{e}', f'{w}op{e}')
+                        text = text.replace(f'{w}Mgo{e}', f'{w}mgo{e}')
+                        text = text.replace(f'{w}Mgh{e}', f'{w}mgh{e}')
+                        text = text.replace(f'{w}Cao{e}', f'{w}cao{e}')
+                        text = text.replace(f'{w}Cah{e}', f'{w}cah{e}')
+            return text
+        def __getattr__(self, name):
+            return getattr(self.f, name)
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.f.close()
+
+    import builtins
+    original_open = builtins.open
+    def utf8_open(file, *args, **kwargs):
+        mode = kwargs.get('mode', args[0] if args else 'r')
+        if 'b' not in mode:
+            if 'encoding' not in kwargs:
+                kwargs['encoding'] = 'utf-8'
+            is_ffbonded = 'ffbonded.itp' in str(file)
+            return TextFileWrapper(original_open(file, *args, **kwargs), is_ffbonded=is_ffbonded, is_clayff_2004=is_clayff_2004)
+        return original_open(file, *args, **kwargs)
+
+    builtins.open = utf8_open
+    try:
+        top = app.GromacsTopFile(
+            top_path,
+            periodicBoxVectors=box_vectors,
+            includeDir=include_dir,
+            defines=defines_dict,
+        )
+    finally:
+        builtins.open = original_open
     system = top.createSystem(
         nonbondedMethod=nonbonded_method,
         nonbondedCutoff=nonbonded_cutoff_nm * unit.nanometer,
@@ -96,4 +216,4 @@ def load_minff_into_openmm(
         ewaldErrorTolerance=ewald_error_tolerance,
         useDispersionCorrection=use_dispersion_correction,
     )
-    return top.topology, system, gro.positions
+    return top.topology, system, positions
