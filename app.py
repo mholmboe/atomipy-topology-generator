@@ -383,8 +383,8 @@ def process_file_task(
             if 'itp' in output_formats:
                 tasks_status[task_id] = {'status': 'Processing', 'step': 'Writing ITP', 'progress': int(progress_step)}
                 topology_itp = os.path.join(results_dir, f"{base_filename}_{ff_type}.itp")
-                from atomipy import write_top
-                write_top.itp(
+                from atomipy import write_itp
+                write_itp(
                     atoms,
                     Box=Box_dim,
                     file_path=topology_itp,
@@ -398,8 +398,8 @@ def process_file_task(
             if 'psf' in output_formats:
                 tasks_status[task_id] = {'status': 'Processing', 'step': 'Writing PSF', 'progress': int(progress_step)}
                 topology_psf = os.path.join(results_dir, f"{base_filename}_{ff_type}.psf")
-                from atomipy import write_top
-                write_top.psf(
+                from atomipy import write_psf
+                write_psf(
                     atoms,
                     Box=Box_dim,
                     file_path=topology_psf,
@@ -427,8 +427,8 @@ def process_file_task(
                 except Exception as e:
                     print(f"Warning: Could not load forcefield Pair Coeffs: {e}")
                     ff_params = None
-                from atomipy import write_top
-                write_top.lmp(
+                from atomipy import write_lmp
+                write_lmp(
                     atoms,
                     Box=Box_dim,
                     file_path=topology_lmp,
