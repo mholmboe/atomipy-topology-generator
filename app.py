@@ -264,6 +264,23 @@ def process_file_task(
                 fuse_rmax,
             )
 
+        # Normalize molecule IDs BEFORE any bond-detection-dependent step.
+        # bond_angle() (used by add_hydrogens_bvs and by the minff/clayff typing
+        # below) only forms bonds between atoms that share a molid
+        # (same_molecule_only=True), so a mineral framework split across several
+        # residue/molid groups would otherwise lose its internal bonds — breaking
+        # BVS bond-valence sums and force-field coordination detection alike.
+        # This runs after fuse_atoms (distance-based, molid-independent) so it
+        # operates on the de-duplicated structure, and it is safe to run this
+        # early because find_H2O() detects water purely from O–H geometry,
+        # independent of molid or atom order.
+        if reset_molid:
+            tasks_status[task_id] = {'status': 'Processing', 'step': 'Resetting molecule IDs', 'progress': 20}
+            try:
+                atoms = reset_mineral_molids(atoms, Box_dim)
+            except Exception as e:
+                print(f"Warning: molecule-ID reset / water separation failed ({e}); proceeding with original molids.")
+
         if add_hydrogen_bvs:
             tasks_status[task_id] = {
                 'status': 'Processing',
@@ -312,16 +329,16 @@ def process_file_task(
                 replicate_factors,
             )
 
-        # Reset molecule IDs (mineral framework -> molid 1) when requested.
-        # Applied identically for MINFF and CLAYFF — the "Reset molecule IDs"
-        # advanced option is force-field agnostic. Done before typing so the
-        # water separation also benefits MINFF coordination detection.
-        if reset_molid:
-            tasks_status[task_id] = {'status': 'Processing', 'step': 'Resetting molecule IDs', 'progress': 28}
-            try:
-                atoms = reset_mineral_molids(atoms, Box_dim)
-            except Exception as e:
-                print(f"Warning: molecule-ID reset / water separation failed ({e}); proceeding with original molids.")
+            # replicate_system keeps molids (keep_molid=True): the single mineral
+            # molecule stays molid 1 across all images, but each replicated water
+            # molecule keeps its source molid, so distinct waters end up sharing a
+            # molid. Re-normalize so every water image becomes its own molecule
+            # again (the mineral framework remains molid 1).
+            if reset_molid:
+                try:
+                    atoms = reset_mineral_molids(atoms, Box_dim)
+                except Exception as e:
+                    print(f"Warning: post-replicate molecule-ID reset failed ({e}); proceeding with replicated molids.")
 
         tasks_status[task_id] = {'status': 'Processing', 'step': f'Assigning {ff_type} atom types', 'progress': 30}
         if ff_type == 'minff':
