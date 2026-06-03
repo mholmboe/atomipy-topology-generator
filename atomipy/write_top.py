@@ -9,18 +9,19 @@ def _to_float(val, default=0.0):
     except (ValueError, TypeError): return default
 
 
+# ---------------------------------------------------------------------------
+# Shared MINFF/CLAYFF angle model (single source of truth).
+# Defined here — the lowest-level module that needs it — so write_top.py does
+# NOT import the heavier topology package at load time. merge_top.py and
+# topology.builder both import these from here.
+# ---------------------------------------------------------------------------
 def angle_parameters(type1, type2, type3, angle_val, KANGLE=500.0):
-    """atomipy MINFF/CLAYFF angle model — the single source of truth for angle
-    parameters, shared by write_top.itp() and merge_top._build_mineral_itp().
-
-    Classifies an angle triplet by its hydrogen count and returns
-    ``(theta0_deg, ktheta, category)``:
-
+    """atomipy MINFF/CLAYFF angle model. Returns (theta0_deg, ktheta, category):
       * 1 H  -> 'moh'   M-O-H hydroxyl bend: theta0 = 110.0, k = 125.52
                  (50.208 when a Mg metal is involved).
       * 2 H  -> 'water' H-O-H: theta0 = 109.47, k = 383.0.
-      * 0 H  -> 'metal' O-M-O / M-O-M framework bend: theta0 = the *scanned*
-                 angle from the structure, k = KANGLE (the chosen Ka).
+      * 0 H  -> 'metal' O-M-O / M-O-M framework bend: theta0 = the scanned angle,
+                 k = KANGLE.
     """
     types = (str(type1), str(type2), str(type3))
     h_count = sum(1 for t in types if t[:1].upper() == 'H')
@@ -30,6 +31,33 @@ def angle_parameters(type1, type2, type3, angle_val, KANGLE=500.0):
     if h_count >= 2:
         return 109.47, 383.0, 'water'
     return float(angle_val), float(KANGLE), 'metal'
+
+
+def cluster_angles(values, threshold=30.0):
+    """Gap-based clustering of angle values. Returns a list of
+    (cluster_mean, cluster_values) tuples — one entry unless a bimodal split
+    (largest gap > threshold/2, spread > threshold, >=4 samples) is found."""
+    if not values:
+        return []
+    sorted_vals = sorted(values)
+    spread = sorted_vals[-1] - sorted_vals[0]
+    if spread <= threshold or len(values) < 4:
+        return [(sum(values) / len(values), values)]
+    max_gap = 0
+    split_idx = 0
+    for i in range(len(sorted_vals) - 1):
+        gap = sorted_vals[i + 1] - sorted_vals[i]
+        if gap > max_gap:
+            max_gap = gap
+            split_idx = i + 1
+    if max_gap > threshold / 2:
+        cluster1 = sorted_vals[:split_idx]
+        cluster2 = sorted_vals[split_idx:]
+        return [
+            (sum(cluster1) / len(cluster1), cluster1),
+            (sum(cluster2) / len(cluster2), cluster2),
+        ]
+    return [(sum(values) / len(values), values)]
 
 
 def is_solvent_or_ion(atom):
@@ -1111,50 +1139,6 @@ def psf(atoms, Box=None, file_path=None, segid=None, rmaxH=1.2, rmaxM=2.45,
     return file_path
 
 
-def cluster_angles(values, threshold=30.0):
-    """
-    Cluster angle values into groups based on threshold separation.
-    
-    If max-min > threshold, attempts to split into clusters using gap-based method.
-    
-    Args:
-        values: List of angle values
-        threshold: Minimum spread to consider bimodal (degrees)
-        
-    Returns:
-        List of (avg, values_list) tuples for each cluster
-    """
-    if not values:
-        return []
-    
-    sorted_vals = sorted(values)
-    spread = sorted_vals[-1] - sorted_vals[0]
-    
-    if spread <= threshold or len(values) < 4:
-        # Not bimodal, return single cluster
-        return [(sum(values) / len(values), values)]
-    
-    # Find largest gap in sorted values
-    max_gap = 0
-    split_idx = 0
-    for i in range(len(sorted_vals) - 1):
-        gap = sorted_vals[i + 1] - sorted_vals[i]
-        if gap > max_gap:
-            max_gap = gap
-            split_idx = i + 1
-    
-    # Only split if gap is significant (> threshold/2)
-    if max_gap > threshold / 2:
-        cluster1 = sorted_vals[:split_idx]
-        cluster2 = sorted_vals[split_idx:]
-        return [
-            (sum(cluster1) / len(cluster1), cluster1),
-            (sum(cluster2) / len(cluster2), cluster2)
-        ]
-    else:
-        return [(sum(values) / len(values), values)]
-
-
 def lmp(atoms, Box=None, file_path=None, forcefield=None, rmaxH=1.2, rmaxM=2.45, 
         comment=None, detect_bimodal=False, bimodal_threshold=30.0, max_angle=None,
         KANGLE=500):
@@ -1665,7 +1649,7 @@ def lmp(atoms, Box=None, file_path=None, forcefield=None, rmaxH=1.2, rmaxM=2.45,
             molid = atom.get('molid', atom.get('resid', 1))
             charge = safe_charge(atom)
             x, y, z = atom.get('x', 0.0), atom.get('y', 0.0), atom.get('z', 0.0)
-            f.write(f"{i:<8}{molid:<8}{atom_type:<8}{charge:<12.6f}{x:<12.5f}{y:<12.5f}{z:<12.5f}  # {atom.get('type', '')}\n")
+            f.write(f"{i:<8}{molid:<8}{atom_type:<8}{charge:>12.6f}  {x:<12.5f}{y:<12.5f}{z:<12.5f}  # {atom.get('type', '')}\n")
         f.write("\n")
         
         # Write bond coefficients if we have bonds
