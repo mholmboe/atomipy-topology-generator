@@ -187,6 +187,18 @@
                             </label>
                         </div>
                         <div class="form-text">Select at least one format if topology generation is enabled.</div>
+
+                        <div class="form-check form-switch mt-3">
+                            <input class="form-check-input" type="checkbox" id="include_solvent_topology"
+                                name="include_solvent_topology" checked>
+                            <label class="form-check-label" for="include_solvent_topology">
+                                Include ions &amp; water in topology
+                            </label>
+                        </div>
+                        <div class="form-text">When checked, the topology files describe the full system. Uncheck to
+                            write topology files (.itp, .psf, .data) for the mineral framework only — any ions and water
+                            present are still written to the structure files (.gro, .pdb, .xyz) but excluded from the
+                            topology.</div>
                     </div>
 
                     <!-- Removed charge assignment selection as it's now automatic -->
@@ -408,6 +420,10 @@
         const resetMolidCheckbox = document.getElementById('reset_molid');
         if (resetMolidCheckbox) {
             formData.set('reset_molid', resetMolidCheckbox.checked ? 'true' : 'false');
+        }
+        const includeSolventCheckbox = document.getElementById('include_solvent_topology');
+        if (includeSolventCheckbox) {
+            formData.set('include_solvent_topology', includeSolventCheckbox.checked ? 'true' : 'false');
         }
 
         let taskId = null;

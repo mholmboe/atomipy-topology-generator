@@ -207,6 +207,21 @@ def reset_mineral_molids(atoms, Box_dim, group_by_component=False):
     return atoms
 
 
+def mineral_atoms_only(atoms, Box_dim):
+    """Return only the mineral-framework atoms as a single molid=1 molecule,
+    dropping water and ions. Used when the user asks for a mineral-only
+    topology. Water is identified geometrically by find_H2O (independent of
+    molid/atom order) and assign_resname tags the remaining framework as 'MIN'
+    versus ions. The mineral atoms keep their force-field types and charges.
+    Returns [] if no mineral atoms are found.
+    """
+    ap = get_ap()
+    _SOL, noSOL = ap.find_H2O(atoms, Box_dim)
+    noSOL = ap.assign_resname(noSOL)
+    MIN = [a for a in noSOL if a.get('resname') == 'MIN']
+    return ap.update(MIN, molid=1) if MIN else []
+
+
 def process_file_task(
     task_id,
     filepath,
@@ -229,6 +244,7 @@ def process_file_task(
     replicate_nz=1,
     angle_terms=DEFAULT_ANGLE_TERM_MINFF,
     reset_molid=True,
+    include_solvent_topology=True,
 ):
     start_time = time.time()
     logger.info(f"Starting task {task_id} for file {filename}")
@@ -442,13 +458,30 @@ def process_file_task(
         
         # Only generate topology files if requested
         if generate_topology and output_formats:
+            # Topology files describe the full system by default. If the user
+            # opted out of including ions & water, write topology for the
+            # mineral framework only (the structure files below still contain
+            # the full system).
+            topo_atoms = atoms
+            if not include_solvent_topology:
+                try:
+                    topo_atoms = mineral_atoms_only(atoms, Box_dim)
+                except Exception as e:
+                    print(f"Warning: could not isolate mineral atoms ({e}); writing full-system topology.")
+                    topo_atoms = atoms
+                if not topo_atoms:
+                    print("Warning: no mineral atoms identified; writing full-system topology.")
+                    topo_atoms = atoms
+                else:
+                    print(f"Topology limited to mineral framework: {len(topo_atoms)} of {len(atoms)} atoms.")
+
             progress_increment = (85 - progress_step) / len(output_formats) if output_formats else 0
             if 'itp' in output_formats:
                 tasks_status[task_id] = {'status': 'Processing', 'step': 'Writing ITP', 'progress': int(progress_step)}
                 topology_itp = os.path.join(results_dir, f"{base_filename}_{ff_type}.itp")
                 from atomipy import write_itp
                 write_itp(
-                    atoms,
+                    topo_atoms,
                     Box=Box_dim,
                     file_path=topology_itp,
                     explicit_angles=1 if include_angles else 0,
@@ -463,7 +496,7 @@ def process_file_task(
                 topology_psf = os.path.join(results_dir, f"{base_filename}_{ff_type}.psf")
                 from atomipy import write_psf
                 write_psf(
-                    atoms,
+                    topo_atoms,
                     Box=Box_dim,
                     file_path=topology_psf,
                     max_angle=topology_max_angle,
@@ -492,7 +525,7 @@ def process_file_task(
                     ff_params = None
                 from atomipy import write_lmp
                 write_lmp(
-                    atoms,
+                    topo_atoms,
                     Box=Box_dim,
                     file_path=topology_lmp,
                     forcefield=ff_params,
@@ -629,6 +662,7 @@ def start_processing_task():  # Renamed route function
         replicate_ny = max(1, parse_int(request.form.get('replicate_ny'), 1))
         replicate_nz = max(1, parse_int(request.form.get('replicate_nz'), 1))
         reset_molid = parse_bool(request.form.get('reset_molid'), default=True)
+        include_solvent_topology = parse_bool(request.form.get('include_solvent_topology'), default=True)
         default_angle_terms = DEFAULT_ANGLE_TERM_MINFF if ff_type == 'minff' else DEFAULT_ANGLE_TERM_CLAYFF
         angle_terms = request.form.get('angle_terms', default_angle_terms).strip().lower()
         if angle_terms not in ANGLE_TERM_OPTIONS:
@@ -693,6 +727,7 @@ def start_processing_task():  # Renamed route function
                 replicate_nz,
                 angle_terms,
                 reset_molid,
+                include_solvent_topology,
             )
 
             # Cloud-safe mode: run heavy compute inside the request to avoid post-response CPU throttling.
