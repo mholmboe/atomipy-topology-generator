@@ -143,19 +143,30 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 # --- Background Task ---
-def reset_mineral_molids(atoms, Box_dim):
+def reset_mineral_molids(atoms, Box_dim, group_by_component=False):
     """Normalize molecule IDs so the mineral framework becomes a single
-    molid=1 group, with water and ions following, regardless of the residue
-    IDs present in the uploaded structure.
+    molid=1 group, with each ion and each water molecule its own molecule,
+    regardless of the residue IDs present in the uploaded structure.
 
     Water is separated out first (find_H2O) so its oxygens do not perturb the
-    mineral coordination-number detection during force-field typing, then the
-    atoms are reassembled and restored to the user's original layout order.
+    mineral coordination-number detection during force-field typing.
+
+    Ordering is controlled by ``group_by_component``:
+
+    * False (default): the atoms are restored to the user's original layout
+      order. Used for the pre-typing reset, so a clean, already-grouped upload
+      keeps its layout untouched.
+    * True: the atoms are emitted grouped as all-mineral, then all-ions, then
+      all-water, with contiguous molids (via join_and_reorder). Used after
+      replication, where replicate_system tiles the cell per image
+      (clay,water,clay,water,...) — that interleaving would split the single
+      mineral molecule into non-contiguous blocks and break the GROMACS
+      [ molecules ] section. Intra-component order is preserved.
 
     This is shared by both MINFF and CLAYFF so the "Reset molecule IDs"
     advanced option behaves identically for the two force fields. It only
-    touches resname/molid bookkeeping (not coordinates or ordering), so it
-    does not change geometry-based atom typing.
+    touches resname/molid bookkeeping (not coordinates), so it does not change
+    geometry-based atom typing.
 
     Returns the updated atoms list.
     """
@@ -174,8 +185,9 @@ def reset_mineral_molids(atoms, Box_dim):
                 round(float(a.get('z', 0.0)), 4))
 
     orig_order = {}
-    for idx, a in enumerate(atoms):
-        orig_order.setdefault(_coord_key(a), idx)
+    if not group_by_component:
+        for idx, a in enumerate(atoms):
+            orig_order.setdefault(_coord_key(a), idx)
 
     SOL, noSOL = ap.find_H2O(atoms, Box_dim)
     noSOL = ap.assign_resname(noSOL)
@@ -183,8 +195,12 @@ def reset_mineral_molids(atoms, Box_dim):
     OTHER = [a for a in noSOL if a.get('resname') != 'MIN']
     if MIN:
         MIN = ap.update(MIN, molid=1)
-    atoms = ap.update(MIN, OTHER, SOL)
 
+    if group_by_component:
+        # all-mineral, all-ions, all-water with contiguous molids (mineral -> 1).
+        return ap.join_and_reorder(MIN, OTHER, SOL)
+
+    atoms = ap.update(MIN, OTHER, SOL)
     # Restore the original layout order (robust to find_H2O rebuilding dicts).
     atoms = sorted(atoms, key=lambda a: orig_order.get(_coord_key(a), float('inf')))
     atoms = ap.update(atoms)
@@ -329,14 +345,15 @@ def process_file_task(
                 replicate_factors,
             )
 
-            # replicate_system keeps molids (keep_molid=True): the single mineral
-            # molecule stays molid 1 across all images, but each replicated water
-            # molecule keeps its source molid, so distinct waters end up sharing a
-            # molid. Re-normalize so every water image becomes its own molecule
-            # again (the mineral framework remains molid 1).
+            # replicate_system tiles the cell per image (keep_molid=True), so the
+            # output is interleaved (clay,water,clay,water,...) and the single
+            # mineral molecule is no longer contiguous. Re-normalize AND regroup
+            # into all-mineral + all-ions + all-water with contiguous molids, so
+            # the GROMACS [ molecules ] section is valid and each replicated water
+            # becomes its own molecule again (the mineral framework stays molid 1).
             if reset_molid:
                 try:
-                    atoms = reset_mineral_molids(atoms, Box_dim)
+                    atoms = reset_mineral_molids(atoms, Box_dim, group_by_component=True)
                 except Exception as e:
                     print(f"Warning: post-replicate molecule-ID reset failed ({e}); proceeding with replicated molids.")
 
