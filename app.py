@@ -675,17 +675,22 @@ def results(results_id):
         flash(f'Could not find results directory: {e}')
         return redirect(url_for('index'))
 
-    # Organize files by type and forcefield
-    minff_files = [f for f in result_files if '_minff.' in f]
-    clayff_files = [f for f in result_files if '_clayff.' in f]
-    
+    # Organize files by type and forcefield.
+    # Match the '_minff' / '_clayff' tag as a substring (not '_minff.') so that
+    # auxiliary topology files such as '<base>_minff_harmonized_ffbonded.itp'
+    # are grouped with the main topology bundle instead of landing in the
+    # standalone "Other Files" section. The stats logs ('minff_structure_stats.log')
+    # have no leading underscore, so they are not caught here.
+    minff_files = [f for f in result_files if '_minff' in f]
+    clayff_files = [f for f in result_files if '_clayff' in f]
+
     # Handle log files explicitly
     minff_logs = [f for f in result_files if 'minff_structure_stats.log' in f]
     clayff_logs = [f for f in result_files if 'clayff_structure_stats.log' in f]
-    
+
     # Any file not caught by the above categories
-    other_files = [f for f in result_files if 
-                  ('_minff.' not in f and '_clayff.' not in f) and
+    other_files = [f for f in result_files if
+                  ('_minff' not in f and '_clayff' not in f) and
                   ('minff_structure_stats.log' not in f and 'clayff_structure_stats.log' not in f)]
 
     files = {
