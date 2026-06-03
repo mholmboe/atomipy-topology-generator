@@ -143,6 +143,54 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 # --- Background Task ---
+def reset_mineral_molids(atoms, Box_dim):
+    """Normalize molecule IDs so the mineral framework becomes a single
+    molid=1 group, with water and ions following, regardless of the residue
+    IDs present in the uploaded structure.
+
+    Water is separated out first (find_H2O) so its oxygens do not perturb the
+    mineral coordination-number detection during force-field typing, then the
+    atoms are reassembled and restored to the user's original layout order.
+
+    This is shared by both MINFF and CLAYFF so the "Reset molecule IDs"
+    advanced option behaves identically for the two force fields. It only
+    touches resname/molid bookkeeping (not coordinates or ordering), so it
+    does not change geometry-based atom typing.
+
+    Returns the updated atoms list.
+    """
+    ap = get_ap()
+    # Capture the original layout order keyed by coordinate. We cannot tag the
+    # dicts directly: find_H2O() rebuilds the water atoms as fresh dicts (and
+    # re-indexes both subsets from 1), so any custom key or the 'index' field is
+    # lost on the water atoms. Coordinates survive the rebuild and are unique
+    # per atom, so they let us restore order robustly. Atoms that fail to match
+    # (should not happen) sort to the end via the inf fallback rather than
+    # raising — the previous code raised here and silently disabled the reset
+    # for any system containing water.
+    def _coord_key(a):
+        return (round(float(a.get('x', 0.0)), 4),
+                round(float(a.get('y', 0.0)), 4),
+                round(float(a.get('z', 0.0)), 4))
+
+    orig_order = {}
+    for idx, a in enumerate(atoms):
+        orig_order.setdefault(_coord_key(a), idx)
+
+    SOL, noSOL = ap.find_H2O(atoms, Box_dim)
+    noSOL = ap.assign_resname(noSOL)
+    MIN = [a for a in noSOL if a.get('resname') == 'MIN']
+    OTHER = [a for a in noSOL if a.get('resname') != 'MIN']
+    if MIN:
+        MIN = ap.update(MIN, molid=1)
+    atoms = ap.update(MIN, OTHER, SOL)
+
+    # Restore the original layout order (robust to find_H2O rebuilding dicts).
+    atoms = sorted(atoms, key=lambda a: orig_order.get(_coord_key(a), float('inf')))
+    atoms = ap.update(atoms)
+    return atoms
+
+
 def process_file_task(
     task_id,
     filepath,
@@ -264,38 +312,19 @@ def process_file_task(
                 replicate_factors,
             )
 
+        # Reset molecule IDs (mineral framework -> molid 1) when requested.
+        # Applied identically for MINFF and CLAYFF — the "Reset molecule IDs"
+        # advanced option is force-field agnostic. Done before typing so the
+        # water separation also benefits MINFF coordination detection.
+        if reset_molid:
+            tasks_status[task_id] = {'status': 'Processing', 'step': 'Resetting molecule IDs', 'progress': 28}
+            try:
+                atoms = reset_mineral_molids(atoms, Box_dim)
+            except Exception as e:
+                print(f"Warning: molecule-ID reset / water separation failed ({e}); proceeding with original molids.")
+
         tasks_status[task_id] = {'status': 'Processing', 'step': f'Assigning {ff_type} atom types', 'progress': 30}
         if ff_type == 'minff':
-            # Import necessary functions from atomipy
-            from atomipy.forcefield import minff
-
-            # Separate water from mineral+ions BEFORE running MINFF so that water
-            # oxygens do not perturb the coordination-number detection for Al/Mg.
-            # This mirrors the run_sys2minff.py pipeline exactly.
-            # Only do this when reset_molid is True (the default / recommended option).
-            if reset_molid:
-                try:
-                    ap = get_ap()
-                    # Tag with original index to preserve the user's custom layout order
-                    for idx, a in enumerate(atoms):
-                        a['_orig_index'] = idx
-
-                    SOL, noSOL = ap.find_H2O(atoms, Box_dim)
-                    noSOL = ap.assign_resname(noSOL)
-                    MIN = [a for a in noSOL if a.get('resname') == 'MIN']
-                    OTHER = [a for a in noSOL if a.get('resname') != 'MIN']
-                    if MIN:
-                        MIN = ap.update(MIN, molid=1)
-                    atoms = ap.update(MIN, OTHER, SOL)
-
-                    # Restore original layout order
-                    atoms = sorted(atoms, key=lambda a: a.get('_orig_index', 0))
-                    for a in atoms:
-                        a.pop('_orig_index', None)
-                    atoms = ap.update(atoms)
-                except Exception as e:
-                    print(f"Warning: water/ion separation failed ({e}); running minff on full system.")
-
             # Generate log file path in the writable results directory
             log_file = os.path.join(results_dir, 'minff_structure_stats.log')
 
