@@ -4,6 +4,8 @@ The **atomipy topology generator** is a powerful web-based application designed 
 
 Powered by the [**atomipy**](https://github.com/mholmboe/atomipy) core library, this tool provides a streamlined interface for preparing structures for molecular dynamics (MD) simulations using the **MINFF** and **CLAYFF** forcefields.
 
+> 🌐 **Live app:** [**topology.atomipy.io**](https://topology.atomipy.io) — also reachable via [**atomipy.io/topology**](https://atomipy.io/topology).
+
 ---
 
 ## 🚀 Key Features
