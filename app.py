@@ -72,6 +72,18 @@ app = Flask(
     template_folder=os.path.join(BASE_DIR, 'templates'),
     static_folder=os.path.join(BASE_DIR, 'static')
 )
+
+# Application version of the topology-generator app itself (the embedded
+# atomipy package carries its own, separate atomipy.__version__).
+APP_VERSION = "0.1.0"
+
+
+@app.context_processor
+def _inject_app_version():
+    """Make {{ app_version }} available in every template (e.g. the footer)."""
+    return {"app_version": APP_VERSION}
+
+
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE  # Reduced to 16 MB for better stability
 
