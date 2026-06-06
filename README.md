@@ -74,6 +74,8 @@ requests to keep progress updates live during processing.
 - `static/`: CSS styling, brand assets, and client-side scripts.
 - `uploads/` / `results/`: Temporary storage for user-uploaded structures and generated bundles.
 
+> **⚠️ Data retention:** Results can only be downloaded right after they are generated. Nothing is retained server-side — there is no database or persistent storage — so results cannot be retrieved later and must be downloaded and kept as your own local copy immediately.
+
 ---
 
 ## 📄 License & Credits
