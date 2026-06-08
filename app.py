@@ -80,8 +80,11 @@ APP_VERSION = "0.1.0"
 
 @app.context_processor
 def _inject_app_version():
-    """Make {{ app_version }} available in every template (e.g. the footer)."""
-    return {"app_version": APP_VERSION}
+    """Make {{ app_version }} (footer) and {{ cold_start }} available in every
+    template. cold_start is True only on Cloud Run (which injects K_SERVICE),
+    i.e. the scale-to-zero online site — not local dev — so the cold-start
+    notice only shows online."""
+    return {"app_version": APP_VERSION, "cold_start": bool(os.environ.get("K_SERVICE"))}
 
 
 app.config['SECRET_KEY'] = os.urandom(24)
