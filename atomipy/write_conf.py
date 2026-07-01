@@ -101,7 +101,16 @@ def pdb(atoms, Box, file_path, write_conect=False, write_element=True):
         
         # Add MODEL record
         f.write("MODEL        1\n")
-        
+
+        # OpenMM drops atoms with duplicate NAMES inside the same residue. Reindex each
+        # atom into its own residue ONLY when the whole structure is a single residue
+        # (constant resnum/molid) AND atom names repeat — the mineral case. A genuine
+        # multi-residue file, or a small single residue with unique names (e.g. a water or
+        # ligand that happens to be numbered 1), keeps its real residue numbers.
+        _res_ids = {(a.get('resnum') if a.get('resnum') is not None else a.get('molid', 1)) for a in atoms}
+        _names_all = [str(a.get('fftype') or a.get('type') or a.get('element') or '') for a in atoms]
+        _reindex_residues = len(_res_ids) <= 1 and len(set(_names_all)) < len(_names_all)
+
         for i, atom in enumerate(atoms, start=1):
             # Format the ATOM record according to PDB specification
             index = atom.get('index', i)
@@ -141,13 +150,13 @@ def pdb(atoms, Box, file_path, write_conect=False, write_element=True):
             res_seq = atom.get('resnum')
             if res_seq is None:
                 res_seq = atom.get('molid', 1)
-            
-            # If res_seq is constant (e.g. 1), OpenMM treats the entire mineral as a single residue
-            # and discards all atoms with duplicate names (resulting in only 6 atoms parsed!).
-            # Using the 1-based sequential index (i) ensures unique residues while keeping the PDB spec.
-            if res_seq == 1 or res_seq is None:
+
+            # Only reindex into per-atom residues for the single-residue / repeating-name
+            # case detected above (keeps OpenMM from dropping duplicate-named atoms), so a
+            # legitimate residue numbered 1 is no longer split apart.
+            if _reindex_residues:
                 res_seq = i
-                
+
             res_seq = (res_seq - 1) % 9999 + 1 # Columns 23-26: max 4 digits (1 to 9999)
             icode = atom.get('icode', ' ') # Column 27: Code for insertion of residues
             
@@ -312,8 +321,8 @@ def gro(atoms, Box, file_path):
         f.write(f"{len(atoms)}\n")
         # Write each atom line with GRO format: residue number (5 chars), residue name (5 chars), atom name (5 chars), atom number (5 chars), x (8.3f), y (8.3f), z (8.3f) and optionally velocities vx, vy, vz (8.4f each)
         for i, atom in enumerate(atoms, start=1):
-            # Use molid if available, otherwise default to 1
-            resnum = atom.get('molid', 1)  # Use molecule ID as residue number in GRO format
+            # Residue number = molecule id (5-char field wraps at 100000, GROMACS convention).
+            resnum = atom.get('molid', 1) % 100000  # Use molecule ID as residue number in GRO format
             resname = atom.get('resname', 'UNK')
             
             # Use 'type' field for atom name, fall back to element or first character of resname
@@ -323,9 +332,13 @@ def gro(atoms, Box, file_path):
             if atomname is None:
                 atomname = resname[0] if resname else 'X'
             atomname = str(atomname)
-                
-            index = atom.get('index', i)
-            
+
+            # Atom serial is POSITIONAL in a .gro (5-char field, wraps at 100000). Always
+            # write a sequential number so subset/reordered atom lists (e.g. solvated boxes
+            # whose 'index' carries the replicated template's sparse ids) can't leave gaps
+            # or duplicates.
+            index = i % 100000
+
             # Convert coordinates from Angstroms to nm for .gro format
             x = atom.get('x', 0.0) * angstrom_to_nm
             y = atom.get('y', 0.0) * angstrom_to_nm

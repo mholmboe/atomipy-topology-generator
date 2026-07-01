@@ -106,10 +106,10 @@ def unwrap_coordinates(atoms, Box, molid=None):
                 
     return unwrapped_atoms
 
-def calculate_rdf(atoms, Box, rmax=15.0, dr=0.1, atom_types=None, pair_types=None, typeA=None, typeB=None):
+def calculate_rdf(atoms, Box, rmax=15.0, dr=0.1, atom_types=None, pair_types=None, typeA=None, typeB=None, return_cn=False):
     """
     Calculate the Radial Distribution Function g(r) for specified atom pairs.
-    
+
     Parameters
     ----------
     atoms : list of dict
@@ -124,14 +124,18 @@ def calculate_rdf(atoms, Box, rmax=15.0, dr=0.1, atom_types=None, pair_types=Non
         Filter atoms by these types for both particles in the pair.
     pair_types : tuple of lists, optional
         (types_A, types_B) to compute RDF between elements of A and B.
-        
+    return_cn : bool
+        If True, also return the running coordination number n(r) — the average
+        number of B atoms within radius r of an A atom (cumulative integral of g(r)).
+
     Returns
     -------
     tuple
-        (r, g_r) - Bin centers and RDF values.
+        (r, g_r) — or (r, g_r, n_r) when return_cn=True.
     """
+    _empty = (np.array([]), np.array([]), np.array([])) if return_cn else (np.array([]), np.array([]))
     if not atoms:
-        return np.array([]), np.array([])
+        return _empty
 
     # Map typeA/typeB to pair_types if provided
     if typeA and typeB:
@@ -155,12 +159,33 @@ def calculate_rdf(atoms, Box, rmax=15.0, dr=0.1, atom_types=None, pair_types=Non
         is_cross = False
 
     if not indices_a or not indices_b:
-        return np.array([]), np.array([])
+        return _empty
 
     # Use dist_matrix for all-to-all distances
     # For large systems, we should use cell_list for performance, but dist_matrix is easier for RDF
     # actually distances.py has get_neighbor_list which is better for large systems
-    
+
+    # dist_matrix uses single-image minimum-image distances, so g(r) is only valid out to
+    # half the shortest box edge; beyond that periodic images are missed and the spherical
+    # shell exceeds the box. Cap rmax to that limit (with a warning) rather than returning
+    # silently-wrong large-r values.
+    if len(Box) == 9:
+        _edges = (Box[0], Box[1], Box[2])
+    elif len(Box) == 3:
+        _edges = (Box[0], Box[1], Box[2])
+    else:
+        from .cell_utils import Cell2Box_dim
+        _bd = Cell2Box_dim(Box)
+        _edges = (_bd[0], _bd[1], _bd[2])
+    _rmax_valid = 0.5 * min(_edges)
+    if rmax > _rmax_valid + 1e-9:
+        import warnings
+        warnings.warn(
+            f"calculate_rdf: rmax={rmax:.3g} A exceeds half the shortest box edge "
+            f"({_rmax_valid:.3g} A); capping to that limit (minimum-image g(r) is only "
+            f"valid to L/2).", stacklevel=2)
+        rmax = _rmax_valid
+
     # Construct histogram
     bins = np.arange(0, rmax + dr, dr)
     hist = np.zeros(len(bins) - 1)
@@ -209,8 +234,526 @@ def calculate_rdf(atoms, Box, rmax=15.0, dr=0.1, atom_types=None, pair_types=Non
     # g(r) = hist(r) / (N_a * rho * V(r))
     # where N_a is number of atoms in type A
     g_r = hist / (len(indices_a) * rho * shell_v)
-    
+
+    if return_cn:
+        # Running coordination number: average number of B within r of an A atom.
+        # Exact from the same pair histogram: cumulative pair count / N_a.
+        n_r = np.cumsum(hist) / len(indices_a)
+        return r, g_r, n_r
+
     return r, g_r
+
+def density_profile(atoms, Box, axis='z', nbins=100, atom_types=None, mode='number'):
+    """Compute a 1-D density profile along a box axis (averaged over the slab cross-section).
+
+    Parameters
+    ----------
+    atoms : list of dict
+        Atom dictionaries with 'x','y','z' (and 'type'/'element' for filtering/mass).
+    Box : list of float
+        Box dimensions (1x3, 1x6 Cell, or 1x9 Box_dim).
+    axis : {'x','y','z'}
+        Axis along which to bin.
+    nbins : int
+        Number of slabs.
+    atom_types : list of str, optional
+        Restrict to these atom names (matched against 'type' or 'element').
+    mode : {'number','mass','charge'}
+        'number' -> atoms/Å³, 'mass' -> g/cm³ (via atomic masses), 'charge' -> e/Å³.
+
+    Returns
+    -------
+    (centers, density) : tuple of numpy.ndarray
+        Slab centers (Å along the axis) and density values.
+    """
+    if not atoms:
+        return np.array([]), np.array([])
+
+    ai = {'x': 0, 'y': 1, 'z': 2}[axis]
+
+    # Orthogonal box lengths (good enough for the slab cross-section area)
+    if len(Box) >= 9:
+        L = [Box[0], Box[1], Box[2]]
+    elif len(Box) == 6:
+        bd = Cell2Box_dim(Box)
+        L = [bd[0], bd[1], bd[2]]
+    elif len(Box) == 3:
+        L = [Box[0], Box[1], Box[2]]
+    else:
+        return np.array([]), np.array([])
+
+    Laxis = float(L[ai])
+    if Laxis <= 0:
+        return np.array([]), np.array([])
+    area = 1.0
+    for j in range(3):
+        if j != ai:
+            area *= float(L[j])
+
+    if atom_types:
+        sel = [a for a in atoms if a.get('type') in atom_types or a.get('element') in atom_types]
+    else:
+        sel = list(atoms)
+    if not sel:
+        return np.array([]), np.array([])
+
+    coords = np.mod(np.array([a[axis] for a in sel], dtype=float), Laxis)
+    edges = np.linspace(0.0, Laxis, nbins + 1)
+    binw = Laxis / nbins
+
+    if mode == 'mass':
+        from .mass import mass as _mass
+        from .element import element as _element
+        mtab = _mass()
+        _tmp = [dict(a) for a in sel]
+        _element(_tmp)  # fill 'element' for atoms that lack it
+        w = np.array([float(mtab.get(a.get('element'), 0.0)) for a in _tmp], dtype=float)
+    elif mode == 'charge':
+        w = np.array([float(a.get('charge', 0.0)) for a in sel], dtype=float)
+    else:
+        w = None
+
+    hist, _ = np.histogram(coords, bins=edges, weights=w)
+    slab_v = area * binw  # Å³
+    dens = hist / slab_v
+    if mode == 'mass':
+        dens = dens * 1.66053906660  # amu/Å³ -> g/cm³
+    centers = edges[:-1] + binw / 2.0
+    return centers, dens
+
+
+def rdf_frames(frames, rmax=15.0, dr=0.1, typeA=None, typeB=None, atom_types=None, return_cn=False):
+    """Ensemble-average g(r) over a list of (atoms, Box) frames (see calculate_rdf).
+
+    With return_cn=True also returns the ensemble-averaged running coordination
+    number n(r): (r, g_r, n_r).
+    """
+    accum = None
+    accum_n = None
+    r = None
+    n = 0
+    for atoms, Box in frames:
+        res = calculate_rdf(atoms, Box, rmax=rmax, dr=dr,
+                            typeA=typeA, typeB=typeB, atom_types=atom_types, return_cn=return_cn)
+        gi = res[1]
+        if gi is None or len(gi) == 0:
+            continue
+        if accum is None:
+            accum = np.zeros_like(gi)
+            r = res[0]
+            if return_cn:
+                accum_n = np.zeros_like(res[2])
+        accum += gi
+        if return_cn:
+            accum_n += res[2]
+        n += 1
+    if n == 0:
+        return (np.array([]), np.array([]), np.array([])) if return_cn else (np.array([]), np.array([]))
+    if return_cn:
+        return r, accum / n, accum_n / n
+    return r, accum / n
+
+
+def density_frames(frames, axis='z', nbins=100, atom_types=None, mode='number'):
+    """Ensemble-average a density profile over a list of (atoms, Box) frames."""
+    accum = None
+    centers = None
+    n = 0
+    for atoms, Box in frames:
+        c, d = density_profile(atoms, Box, axis=axis, nbins=nbins,
+                               atom_types=atom_types, mode=mode)
+        if d is None or len(d) == 0:
+            continue
+        if accum is None:
+            accum = np.zeros_like(d)
+            centers = c
+        accum += d
+        n += 1
+    if n == 0:
+        return np.array([]), np.array([])
+    return centers, accum / n
+
+
+def _box_lengths(Box):
+    """Orthogonal box edge lengths [Lx, Ly, Lz] from a 1x3/1x6/1x9 box."""
+    if len(Box) >= 9:
+        return [float(Box[0]), float(Box[1]), float(Box[2])]
+    if len(Box) == 6:
+        bd = Cell2Box_dim(Box)
+        return [float(bd[0]), float(bd[1]), float(bd[2])]
+    if len(Box) == 3:
+        return [float(Box[0]), float(Box[1]), float(Box[2])]
+    return [0.0, 0.0, 0.0]
+
+
+def _unwrap_trajectory(frames, idx):
+    """'nojump' unwrap selected atoms across time (remove PBC jumps between frames).
+
+    Returns an ndarray of shape (n_sel_atoms, n_frames, 3) of continuous coordinates.
+    Assumes a constant atom ordering across frames (true for atomipy trajectories).
+    """
+    n = len(frames)
+    m = len(idx)
+    U = np.zeros((m, n, 3))
+    atoms0 = frames[0][0]
+    raw_prev = np.array([[atoms0[i]["x"], atoms0[i]["y"], atoms0[i]["z"]] for i in idx], dtype=float)
+    U[:, 0, :] = raw_prev
+    for t in range(1, n):
+        atoms_t, box_t = frames[t]
+        L = _box_lengths(box_t)
+        raw = np.array([[atoms_t[i]["x"], atoms_t[i]["y"], atoms_t[i]["z"]] for i in idx], dtype=float)
+        d = raw - raw_prev
+        for c in range(3):
+            if L[c] > 0:
+                d[:, c] -= L[c] * np.round(d[:, c] / L[c])
+        U[:, t, :] = U[:, t - 1, :] + d
+        raw_prev = raw
+    return U
+
+
+def _select_indices(atoms, atom_types):
+    if atom_types:
+        return [i for i, a in enumerate(atoms) if a.get("type") in atom_types or a.get("element") in atom_types]
+    return list(range(len(atoms)))
+
+
+def _dim_components(dims):
+    comp = [{"x": 0, "y": 1, "z": 2}[c] for c in str(dims).lower() if c in "xyz"]
+    return comp or [0, 1, 2]
+
+
+def msd(frames, atom_types=None, dims="xyz", origin_stride=1, dt=1.0, fit_lo=0.1, fit_hi=0.5):
+    """Mean-square displacement with multiple time origins (restarts) + diffusion coefficient.
+
+    Parameters
+    ----------
+    frames : list of (atoms, Box)
+        Trajectory; coordinates are 'nojump'-unwrapped internally (PBC-aware).
+    atom_types : list of str, optional
+        Restrict to these atom names (matched against 'type' or 'element').
+    dims : str
+        Components to use: 'xyz' (3D isotropic), 'xy' (2D), 'z' (1D), etc.
+    origin_stride : int
+        Step between time origins (restarts). 1 = use every frame as an origin.
+    dt : float
+        Time between frames (ps); sets the lag axis and D units.
+    fit_lo, fit_hi : float
+        Fraction of the lag range used for the linear D fit (default middle 10–50%).
+
+    Returns
+    -------
+    dict or None
+        {'lags' (ps), 'msd' (Å²), 'D_A2_ps', 'D_cm2_s', 'D_1e9_m2_s', 'dim', 'n_atoms', 'n_frames'}
+    """
+    if not frames or len(frames) < 3:
+        return None
+    idx = _select_indices(frames[0][0], atom_types)
+    if not idx:
+        return None
+    comp = _dim_components(dims)
+    U = _unwrap_trajectory(frames, idx)[:, :, comp]  # (m, n, dim)
+    n = U.shape[1]
+    acc = np.zeros(n)
+    cnt = np.zeros(n)
+    stride = max(1, int(origin_stride))
+    for t0 in range(0, n, stride):
+        disp = U[:, t0:, :] - U[:, t0:t0 + 1, :]          # (m, n-t0, dim)
+        sq = np.sum(disp * disp, axis=2)                   # (m, n-t0)
+        acc[: n - t0] += np.mean(sq, axis=0)               # mean over atoms
+        cnt[: n - t0] += 1
+    msd_curve = acc / np.maximum(cnt, 1)
+    lags = np.arange(n) * float(dt)
+    lo = max(1, int(fit_lo * n))
+    hi = max(lo + 2, int(fit_hi * n))
+    hi = min(hi, n)
+    dim = len(comp)
+    slope = float(np.polyfit(lags[lo:hi], msd_curve[lo:hi], 1)[0]) if hi > lo + 1 else 0.0
+    D = slope / (2.0 * dim)  # Å²/ps
+    return {
+        "lags": lags, "msd": msd_curve,
+        "D_A2_ps": D, "D_cm2_s": D * 1e-4, "D_1e9_m2_s": D * 10.0,
+        "dim": dim, "n_atoms": len(idx), "n_frames": n,
+    }
+
+
+def displacement_distribution(frames, atom_types=None, dims="xyz", lag=None, origin_stride=1, nbins=50):
+    """Distribution of per-component displacements over a lag (van Hove self-part-like).
+
+    Pools the signed displacement of each selected component (per `dims`) over all
+    selected atoms and time origins at a fixed lag — Gaussian for normal diffusion.
+    A Gaussian with the sample's mean/std is returned for overlay.
+
+    Returns
+    -------
+    dict or None
+        {'centers', 'pdf', 'gauss', 'mu', 'sigma', 'lag_frames', 'n_samples'}
+    """
+    if not frames or len(frames) < 3:
+        return None
+    idx = _select_indices(frames[0][0], atom_types)
+    if not idx:
+        return None
+    comp = _dim_components(dims)
+    U = _unwrap_trajectory(frames, idx)[:, :, comp]
+    n = U.shape[1]
+    if lag is None:
+        lag = max(1, n // 2)
+    lag = int(max(1, min(lag, n - 1)))
+    stride = max(1, int(origin_stride))
+    chunks = []
+    for t0 in range(0, n - lag, stride):
+        chunks.append((U[:, t0 + lag, :] - U[:, t0, :]).ravel())
+    if not chunks:
+        return None
+    samples = np.concatenate(chunks)
+    if samples.size == 0:
+        return None
+    rng = float(np.max(np.abs(samples))) or 1.0
+    edges = np.linspace(-rng, rng, nbins + 1)
+    pdf, _ = np.histogram(samples, bins=edges, density=True)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    mu = float(np.mean(samples))
+    sigma = float(np.std(samples))
+    if sigma > 0:
+        gauss = np.exp(-((centers - mu) ** 2) / (2 * sigma ** 2)) / (sigma * np.sqrt(2 * np.pi))
+    else:
+        gauss = np.zeros_like(centers)
+    return {"centers": centers, "pdf": pdf, "gauss": gauss, "mu": mu, "sigma": sigma,
+            "lag_frames": lag, "n_samples": int(samples.size)}
+
+
+def _fd_velocities(U, dt):
+    """Central finite-difference velocities from unwrapped positions U (m, n, 3)."""
+    n = U.shape[1]
+    V = np.zeros_like(U)
+    if n >= 3:
+        V[:, 1:-1, :] = (U[:, 2:, :] - U[:, :-2, :]) / (2.0 * dt)
+        V[:, 0, :] = (U[:, 1, :] - U[:, 0, :]) / dt
+        V[:, -1, :] = (U[:, -1, :] - U[:, -2, :]) / dt
+    elif n == 2:
+        V[:, 0, :] = V[:, 1, :] = (U[:, 1, :] - U[:, 0, :]) / dt
+    return V
+
+
+def vacf(frames, atom_types=None, dt=1.0, origin_stride=1, max_lag=None, window=True):
+    """Velocity autocorrelation function, power spectrum and Green-Kubo diffusion.
+
+    NOTE: the trajectory stores POSITIONS only, so velocities are estimated by central
+    finite difference of the (PBC-unwrapped) positions: v(t) = [r(t+dt) - r(t-dt)]/(2 dt).
+    This is NOT the integrator's true velocity. Consequences:
+      * the resolvable frequency range is capped at the Nyquist limit 1/(2 dt) — for a
+        meaningful vibrational spectrum the trajectory must be saved every few fs;
+      * the difference acts as a low-pass filter (amplitudes scale by sinc(w dt)), so
+        high-frequency peaks are damped.
+    The Green-Kubo diffusion (low-frequency / long-time) is robust; the power spectrum is
+    only meaningful with fine output. For sharp spectra use true .trr velocities instead.
+
+    Parameters
+    ----------
+    frames : list of (atoms, Box)
+    atom_types : list of str, optional   Restrict to these atom names.
+    dt : float                            Time between frames (ps).
+    origin_stride : int                   Stride between time origins (restarts).
+    max_lag : int, optional               Max VACF lag in frames (default n-1).
+    window : bool                         Apply a decaying window before the FFT.
+
+    Returns
+    -------
+    dict or None
+        {'lags' (ps), 'vacf', 'vacf_norm', 'D_A2_ps','D_cm2_s','D_1e9_m2_s',
+         'freq_thz','wavenumber_cm1','spectrum','nyquist_cm1','n_atoms','n_frames'}
+    """
+    if not frames or len(frames) < 4:
+        return None
+    idx = _select_indices(frames[0][0], atom_types)
+    if not idx:
+        return None
+    dt = float(dt)
+    U = _unwrap_trajectory(frames, idx)
+    n = U.shape[1]
+    V = _fd_velocities(U, dt)
+    if max_lag is None:
+        max_lag = n - 1
+    max_lag = int(max(1, min(max_lag, n - 1)))
+    C = np.zeros(max_lag + 1)
+    cnt = np.zeros(max_lag + 1)
+    stride = max(1, int(origin_stride))
+    for t0 in range(0, n, stride):
+        hi = min(n, t0 + max_lag + 1)
+        d = np.einsum('ad,atd->at', V[:, t0, :], V[:, t0:hi, :])  # (m, hi-t0)
+        s = d.mean(axis=0)
+        C[: hi - t0] += s
+        cnt[: hi - t0] += 1
+    C = C / np.maximum(cnt, 1)
+    lags = np.arange(max_lag + 1) * dt
+
+    # Green-Kubo self-diffusion: D = (1/3) integral of the (3D) VACF over time.
+    D = float(np.trapz(C, dx=dt) / 3.0)  # Å²/ps
+
+    # Power spectrum (vibrational DOS) = FFT of the (windowed) VACF.
+    L = len(C)
+    if window and L > 1:
+        w = 0.5 * (1.0 + np.cos(np.pi * np.arange(L) / (L - 1)))  # 1 at lag 0 -> 0 at max lag
+        Cw = C * w
+    else:
+        Cw = C
+    spec = np.abs(np.fft.rfft(Cw))
+    freqs = np.fft.rfftfreq(L, d=dt)          # 1/ps == THz
+    wn = freqs * 33.35641                      # cm^-1 (1 THz = 33.35641 cm^-1)
+    spec_n = spec / spec.max() if spec.max() > 0 else spec
+    nyq_cm1 = (1.0 / (2.0 * dt)) * 33.35641
+
+    return {
+        'lags': lags, 'vacf': C, 'vacf_norm': C / C[0] if C[0] != 0 else C,
+        'D_A2_ps': D, 'D_cm2_s': D * 1e-4, 'D_1e9_m2_s': D * 10.0,
+        'freq_thz': freqs, 'wavenumber_cm1': wn, 'spectrum': spec_n,
+        'nyquist_cm1': nyq_cm1, 'n_atoms': len(idx), 'n_frames': n,
+    }
+
+
+def _mimg(d, L):
+    """Minimum-image a displacement array d (...,3) for orthogonal box lengths L."""
+    for c in range(3):
+        if L[c] > 0:
+            d[..., c] -= L[c] * np.round(d[..., c] / L[c])
+    return d
+
+
+def find_hbonds(atoms, Box, donor_types=None, acceptor_types=None,
+                donor_resnames=None, acceptor_resnames=None,
+                r_cut=3.5, angle_cut=30.0, exclude_same_molecule=True,
+                dh_cut=1.3, elements=None):
+    """Geometric hydrogen-bond detection for ONE frame (GROMACS gmx hbond convention).
+
+    A hydrogen bond D-H...A requires D...A < r_cut AND the H-D...A angle (at the donor)
+    <= angle_cut. Donors/acceptors are O/N/F by element, optionally restricted by atom
+    name (donor_types / acceptor_types) AND/OR residue name (donor_resnames /
+    acceptor_resnames). A filter left as None imposes no restriction on that dimension,
+    so type=None and resname=None selects every O/N/F (the whole system). Each H is
+    bonded to its nearest heavy O/N/F within dh_cut.
+
+    Returns
+    -------
+    list of (donor_idx, h_idx, acceptor_idx)
+    """
+    if not atoms:
+        return []
+    if elements is None:
+        from .element import element as _element
+        ae = [dict(a) for a in atoms]
+        _element(ae)
+        elements = [a.get('element') for a in ae]
+    # Normalize atomipy's water labels to base elements (Ow->O, Hw->H).
+    elements = ['O' if e == 'Ow' else ('H' if e == 'Hw' else e) for e in elements]
+    pos = np.array([[a['x'], a['y'], a['z']] for a in atoms], dtype=float)
+    L = np.array(_box_lengths(Box), dtype=float)
+    molid = [a.get('molid', i) for i, a in enumerate(atoms)]
+    accept_el = {'O', 'N', 'F'}
+
+    def _sel(i, types, resn):
+        if types and atoms[i].get('type') not in types:
+            return False
+        if resn and atoms[i].get('resname') not in resn:
+            return False
+        return True
+
+    acc_idx = [i for i in range(len(atoms))
+               if elements[i] in accept_el and _sel(i, acceptor_types, acceptor_resnames)]
+    don_ok = set(i for i in range(len(atoms))
+                 if elements[i] in accept_el and _sel(i, donor_types, donor_resnames))
+    H_idx = [i for i in range(len(atoms)) if elements[i] == 'H']
+    heavy_all = [i for i in range(len(atoms)) if elements[i] in accept_el]
+    if not acc_idx or not H_idx or not heavy_all:
+        return []
+
+    acc_arr = np.array(acc_idx)
+    acc_pos = pos[acc_arr]
+    heavy_arr = np.array(heavy_all)
+    heavy_pos = pos[heavy_arr]
+
+    hbonds = []
+    for h in H_idx:
+        r = np.sqrt((_mimg(heavy_pos - pos[h], L) ** 2).sum(1))
+        j = int(np.argmin(r))
+        if r[j] > dh_cut:
+            continue
+        D = int(heavy_arr[j])
+        if D not in don_ok:
+            continue
+        rDA = np.sqrt((_mimg(acc_pos - pos[D], L) ** 2).sum(1))
+        for ci in np.where(rDA < r_cut)[0]:
+            A = int(acc_arr[ci])
+            if A == D:
+                continue
+            if exclude_same_molecule and molid[A] == molid[D]:
+                continue
+            u = _mimg((pos[h] - pos[D]).reshape(1, 3).copy(), L)[0]
+            v = _mimg((pos[A] - pos[D]).reshape(1, 3).copy(), L)[0]
+            nu = np.linalg.norm(u); nv = np.linalg.norm(v)
+            if nu == 0 or nv == 0:
+                continue
+            ang = np.degrees(np.arccos(np.clip(np.dot(u, v) / (nu * nv), -1.0, 1.0)))
+            if ang <= angle_cut:
+                hbonds.append((D, h, A))
+    return hbonds
+
+
+def hbonds_frames(frames, donor_types=None, acceptor_types=None,
+                  donor_resnames=None, acceptor_resnames=None, r_cut=3.5,
+                  angle_cut=30.0, exclude_same_molecule=True, max_count=8):
+    """Hydrogen-bond analysis over a trajectory (or single structure).
+
+    Returns total counts and the distribution of H-bonds per molecule (capturing
+    single vs. multiple donor/acceptor participation). A molecule's count is the
+    number of H-bonds it takes part in (as donor or acceptor).
+
+    Returns
+    -------
+    dict or None
+        {'n_frames', 'mean_total', 'mean_per_molecule', 'time_series',
+         'dist_x' (#H-bonds), 'dist_y' (fraction of molecules)}
+    """
+    if not frames:
+        return None
+    from collections import defaultdict
+    from .element import element as _element
+
+    # Atom identity is constant across frames -> classify elements / capable molecules once.
+    atoms0 = frames[0][0]
+    ae = [dict(a) for a in atoms0]
+    _element(ae)
+    elements = ['O' if a.get('element') == 'Ow' else ('H' if a.get('element') == 'Hw' else a.get('element')) for a in ae]
+    capable = set(atoms0[i].get('molid', i) for i in range(len(atoms0)) if elements[i] in ('O', 'N', 'F'))
+    n_capable = max(len(capable), 1)
+
+    dist = np.zeros(max_count + 1)
+    time_series = []
+    n = 0
+    for atoms, Box in frames:
+        hb = find_hbonds(atoms, Box, donor_types=donor_types, acceptor_types=acceptor_types,
+                         donor_resnames=donor_resnames, acceptor_resnames=acceptor_resnames,
+                         r_cut=r_cut, angle_cut=angle_cut, exclude_same_molecule=exclude_same_molecule,
+                         elements=elements)
+        time_series.append(len(hb))
+        per_mol = defaultdict(int)
+        for (D, _H, A) in hb:
+            per_mol[atoms[D].get('molid')] += 1
+            per_mol[atoms[A].get('molid')] += 1
+        for m in capable:
+            dist[min(per_mol.get(m, 0), max_count)] += 1
+        n += 1
+    if n == 0:
+        return None
+    dist = dist / (n * n_capable)
+    return {
+        'n_frames': n,
+        'mean_total': float(np.mean(time_series)),
+        'mean_per_molecule': float(np.sum(np.arange(max_count + 1) * dist)),
+        'time_series': [int(x) for x in time_series],
+        'dist_x': list(range(max_count + 1)),
+        'dist_y': [float(x) for x in dist],
+    }
+
 
 def coordination_number(atoms, Box, cutoff=3.0, atom_types=None, neighbor_types=None, typeA=None, typeB=None):
     """
@@ -242,25 +785,23 @@ def coordination_number(atoms, Box, cutoff=3.0, atom_types=None, neighbor_types=
     i_idx, j_idx, d, _, _, _ = get_neighbor_list(atoms, Box, cutoff)
     
     cn = np.zeros(len(atoms), dtype=int)
-    
-    # If we have filters, we need to handle them
+
+    # get_neighbor_list returns an UNDIRECTED upper-triangle list: each pair (i, j) with
+    # i < j appears once but represents two directed relations (i has neighbor j, and j
+    # has neighbor i), so both endpoints normally get +1.
     if neighbor_types:
-        neighbor_mask = np.array([a.get('type') in neighbor_types for a in atoms])
-        # j_idx refers to indices in 'atoms'
-        valid_mask = neighbor_mask[j_idx]
-        i_idx = i_idx[valid_mask]
-        j_idx = j_idx[valid_mask]
-        
-    # Count occurrences in i_idx
-    unique_i, counts = np.unique(i_idx, return_counts=True)
-    cn[unique_i] = counts
-    
-    # Also count in j_idx (since neighbor list might be half-matrix if implemented that way)
-    # Actually get_neighbor_list in distances.py uses upper triangle mask
-    # so we MUST count both i and j.
-    unique_j, counts_j = np.unique(j_idx, return_counts=True)
-    cn[unique_j] += counts_j
-    
+        neighbor_mask = np.array([a.get('type') in set(neighbor_types) for a in atoms])
+        # Count j toward i's CN only when j is a neighbor_type, and i toward j's CN only
+        # when i is a neighbor_type. This avoids crediting the neighbor atoms themselves
+        # and avoids dropping pairs merely because of upper-triangle index ordering.
+        count_arrays = (i_idx[neighbor_mask[j_idx]], j_idx[neighbor_mask[i_idx]])
+    else:
+        count_arrays = (i_idx, j_idx)
+
+    for arr in count_arrays:
+        unique, counts = np.unique(arr, return_counts=True)
+        cn[unique] += counts
+
     if atom_types:
         target_indices = [i for i, a in enumerate(atoms) if a.get('type') in atom_types]
         return cn[target_indices].tolist()

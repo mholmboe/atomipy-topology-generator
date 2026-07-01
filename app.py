@@ -10,7 +10,7 @@ import importlib.util
 import copy
 import threading
 import contextlib
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, session, Response, jsonify
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, session, Response, jsonify, abort
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 from flask_executor import Executor
@@ -87,7 +87,10 @@ def _inject_app_version():
     return {"app_version": APP_VERSION, "cold_start": bool(os.environ.get("K_SERVICE"))}
 
 
-app.config['SECRET_KEY'] = os.urandom(24)
+# Prefer a stable SECRET_KEY from the environment so sessions/flash messages survive
+# restarts and are consistent across Cloud Run instances; fall back to a random key for
+# local dev only.
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or os.urandom(24)
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE  # Reduced to 16 MB for better stability
 
 # App Engine / Cloud Run specific configuration
@@ -601,9 +604,11 @@ def process_file_task(
         detailed_error = f"{error_type}: {error_details}"
         logger.error(f"Detailed error: {detailed_error}")
         
+        # Don't leak the full exception detail (may contain internal paths/state) to the
+        # client — it's already logged above. Surface only the exception class name.
         tasks_status[task_id] = {
-            'status': 'Error', 
-            'message': f'Error generating output files: {detailed_error}', 
+            'status': 'Error',
+            'message': f'Error generating output files ({error_type}). Please check the input structure; see server logs for details.',
             'progress': 100,
             'error_type': error_type,
             'timestamp': time.time()
@@ -773,8 +778,26 @@ def start_processing_task():  # Renamed route function
         flash('Invalid file type. Allowed types are .gro, .pdb, .xyz, .cif')
         return jsonify({'error': 'Invalid file type'}), 400
 
+def _valid_results_id(results_id):
+    """Reject a results_id that isn't a plain UUID.
+
+    The value comes straight from the URL and is joined onto RESULTS_FOLDER; without
+    this guard a segment like '..' escapes the folder (Flask's <string> converter
+    forbids '/', but a single '..' still matches), letting a request read/zip other
+    users' results. Mirrors the task_id check used when a build is submitted.
+    """
+    try:
+        uuid.UUID(str(results_id))
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 @app.route('/results/<results_id>')
 def results(results_id):
+    if not _valid_results_id(results_id):
+        flash('Invalid results ID.')
+        return redirect(url_for('index'))
     results_dir = os.path.join(app.config['RESULTS_FOLDER'], results_id)
     if not os.path.exists(results_dir):
         flash(f'Results not found for ID {results_id} or may have expired.')
@@ -885,11 +908,16 @@ def get_task_result(task_id):
 
 @app.route('/download/<results_id>/<filename>')
 def download_file(results_id, filename):
+    if not _valid_results_id(results_id):
+        abort(404)
     directory = os.path.join(app.config['RESULTS_FOLDER'], results_id)
     return send_from_directory(directory, filename, as_attachment=True)
 
 @app.route('/download_zip/<results_id>')
 def download_zip(results_id):
+    if not _valid_results_id(results_id):
+        flash('Invalid results ID.')
+        return redirect(url_for('index'))
     results_dir = os.path.join(app.config['RESULTS_FOLDER'], results_id)
     if not os.path.exists(results_dir):
         flash('Results not found.')
