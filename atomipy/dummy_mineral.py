@@ -92,13 +92,12 @@ def uff_lj(element):
 
 # Element-appropriate metal Lennard-Jones (sigma_nm, epsilon_kJ/mol), for *pure
 # metals / alloys* where the borrowed buried-cation site is inappropriate. The
-# face-centred-cubic metals use the well-validated 12-6 parameters of Heinz et
-# al., J. Phys. Chem. C 2008, 112, 17281 (good for metal–water/biomolecule
-# interfaces with Lorentz-Berthelot mixing); the remaining metals use UFF
-# (Rappe et al., JACS 1992) converted as sigma = x1 / 2^(1/6), eps = D1·4.184.
-# Generic/approximate — intended for a qualitative frozen wall, not energetics.
+# face-centred-cubic metals use well-validated 12-6 metallic parameters (good for
+# metal–water/biomolecule interfaces with Lorentz-Berthelot mixing); the remaining
+# metals use UFF (Rappe et al., JACS 1992) converted as sigma = x1 / 2^(1/6),
+# eps = D1·4.184. Generic/approximate — a qualitative frozen wall, not energetics.
 ELEMENT_LJ = {
-    # fcc metals — Heinz 2008 12-6
+    # fcc metals — 12-6 metallic
     'Al': (0.25527, 16.82), 'Ni': (0.22200, 23.64), 'Cu': (0.22770, 19.75),
     'Pd': (0.24510, 25.73), 'Ag': (0.25740, 19.08), 'Pt': (0.24720, 32.64),
     'Au': (0.25690, 22.13), 'Pb': (0.31190, 12.26),
@@ -204,7 +203,7 @@ def _anion_charges_minff(atoms, ox, anion_idx, Box, verbose, rmaxlong=2.45, rmax
 
 def _element_lj(element):
     """Best self-calculated LJ (sigma_nm, epsilon_kJ) for an element: the curated
-    ELEMENT_LJ value (Heinz metals + selected UFF) if present, else UFF computed
+    ELEMENT_LJ value (metallic + selected UFF) if present, else UFF computed
     from vdW data, else None."""
     if element in ELEMENT_LJ:
         return ELEMENT_LJ[element]
@@ -249,7 +248,7 @@ def assign_dummy_mineral_params(atoms, Box=None, charge_mode='pauling', charge_s
         Fixed hydrogen charge in 'pauling' mode (default 0.4).
     lj_mode : {'element', 'minff'}
         Lennard-Jones source. 'element' (default): the Dummy FF computes its OWN
-        per-element LJ from vdW data — ELEMENT_LJ (Heinz metals + selected UFF)
+        per-element LJ from vdW data — ELEMENT_LJ (metallic + selected UFF)
         where available, else UFF (σ = x_i/2^(1/6), ε = D_i) for every element
         including O/F/H. 'minff': borrow from MINFF (O→OPC3, F→F⁻, H→none,
         metals→`metal_site`), which gives stronger O–water attraction.
@@ -333,12 +332,12 @@ def assign_dummy_mineral_params(atoms, Box=None, charge_mode='pauling', charge_s
     # --- LJ, type, mass, freeze ---
     # lj_mode controls where Lennard-Jones parameters come from:
     #   'element' (default) — the Dummy FF's OWN per-element LJ, computed from vdW
-    #       data: ELEMENT_LJ (Heinz metals + selected UFF) where available, else
+    #       data: ELEMENT_LJ (metallic + selected UFF) where available, else
     #       UFF (sigma = x_i/2^(1/6), epsilon = D_i) for every element incl. O/F/H.
     #       No MINFF borrowing; each element gets its own size.
     #   'minff' — borrow from MINFF: O→OPC3 oxygen, F→F⁻, H→none, metals→the
     #       small buried-cation site (`metal_site`). Stronger O–water attraction.
-    # The curated metallic ELEMENT_LJ (Heinz 12-6) only makes sense for a PURE
+    # The curated metallic ELEMENT_LJ (12-6) only makes sense for a PURE
     # metal/alloy. In an ionic framework (anions present) those deep metallic
     # wells are wrong for a cation, so use the UFF vdW LJ for every element.
     _pure_metal = not any(float(o) < 0 for o in ox)
