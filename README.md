@@ -11,11 +11,11 @@ Powered by the [**atomipy**](https://github.com/mholmboe/atomipy) core library, 
 ## 🚀 Key Features
 
 - **Automated Atom Typing**: Intelligent assignment of atom types and partial charges based on local coordination environments for the MINFF and CLAYFF forcefields.
-- **Multi-Format Support**: Import structures from **PDB**, **GRO**, **XYZ**, and **CIF/mmCIF** files.
+- **Multi-Format Support**: Import structures from **PDB**, **GRO**, **XYZ**, and **CIF/mmCIF/mcif** files (CIF/mmCIF requires the `gemmi` dependency).
 - **Topology Export**: Generate ready-to-use topology files for:
   - **GROMACS** (`.itp`)
   - **LAMMPS** (`.data`)
-  - **NAMD / OpenMM** (`.psf`)
+  - **CHARMM / NAMD / OpenMM** (`.psf`)
 - **Performance Optimized**: Specifically engineered to handle large systems (tested up to 50,000+ atoms), with typical processing times between 10-15 minutes for complex minerals.
 - **Crystallographic Awareness**: Full support for both orthogonal and triclinic simulation cells with periodic boundary conditions (PBC).
 
@@ -26,7 +26,7 @@ Powered by the [**atomipy**](https://github.com/mholmboe/atomipy) core library, 
 - **Backend**: Flask (Python 3.11+)
 - **Analysis Engine**: `atomipy` core package
 - **Frontend**: Modern HTML5/CSS with a responsive design
-- **Deployment**: Optimized for **Google Cloud Run** and **Render** via Docker.
+- **Deployment**: Containerized (Docker) for **Google Cloud Run** (an `app.yaml` for Google App Engine is also included).
 
 ---
 
