@@ -347,6 +347,36 @@ def get_structure_stats(atoms, Box=None, total_charge=None, log_file='output.log
     
     return result
 
+_WATER_RESNAMES = {'SOL', 'HOH', 'WAT', 'H2O', 'TIP', 'TIP3', 'TIP4', 'TIP5',
+                   'TIP3P', 'TIP4P', 'TIP5P', 'SPC', 'SPCE', 'OPC', 'OPC3'}
+_ION_ELEMENTS = {'Na', 'K', 'Li', 'Cs', 'Rb', 'Cl', 'F', 'Br', 'I',
+                 'Ca', 'Mg', 'Sr', 'Ba', 'Zn'}
+
+
+def _is_solvent_or_ion(atom):
+    """True for water molecules and monatomic counter-ions — atoms that must NOT count
+    toward a mineral framework atom's coordination during MINFF/CLAYFF typing.
+
+    Because the framework's coordination is detected geometrically (``same_molecule_only=
+    False``), an interlayer cation (Na-O ~2.3 Å, inside rmaxM) or a nearby water would
+    otherwise inflate a surface oxygen's coordination and mistype it (e.g. ``Op`` -> ``O_ov``).
+
+    Water is matched by residue name. An ion is matched only when its element is a common
+    counter-ion AND its residue is named for that ion (e.g. resname ``Na``), so a dual-use
+    element in the framework (octahedral Mg/Ca/Li inside resname ``MIN``/``MMT``) is NOT
+    excluded. molid is deliberately not used, so this stays correct even after a PDB
+    round-trip has turned molid per-atom.
+    """
+    rn = str(atom.get('resname', '') or '').strip()
+    if rn.upper() in _WATER_RESNAMES:
+        return True
+    el = str(atom.get('element', '') or atom.get('type', '') or '').strip()
+    el_cap = el.capitalize()
+    if el_cap in _ION_ELEMENTS and rn.upper() in {el.upper(), 'ION', 'IONS'}:
+        return True
+    return False
+
+
 def minff(atoms, Box, ffname='minff', rmaxlong=2.45, rmaxH=1.2, log=False, log_file=None, dm_method=None):
     """Assign MINFF forcefield specific atom types to atoms based on their coordination environment.
     
@@ -486,11 +516,31 @@ def minff(atoms, Box, ffname='minff', rmaxlong=2.45, rmaxH=1.2, log=False, log_f
             # bonds, leaving every atom untyped (e.g. 'Al' instead of 'Alo' -> downstream KeyError).
             atoms, bond_index, angle_index = bond_angle(atoms, Box, rmaxH=rmaxH, rmaxM=rmaxlong,
                                                         same_molecule_only=False)
-            
+
+            # Drop water/ion neighbours from each FRAMEWORK atom's coordination before typing.
+            # bond_angle above is geometric, so an interlayer cation or nearby water would
+            # otherwise be counted as bonded to a surface oxygen and mistype it (e.g. Op -> O_ov).
+            # This is molid-independent (robust to per-atom molids from a PDB round-trip) and
+            # cheap: an O(N) classification + an O(bonds) neighbour filter. bond_angle itself
+            # is unchanged, so no extra neighbour-search cost is added.
+            _nonframework = {i for i, a in enumerate(atoms) if _is_solvent_or_ion(a)}
+            if _nonframework:
+                for i, atom in enumerate(atoms):
+                    if i in _nonframework:
+                        continue
+                    _neigh = atom.get('neigh', [])
+                    _kept = [j for j in _neigh if j not in _nonframework]
+                    if len(_kept) != len(_neigh):
+                        atom['neigh'] = _kept
+                        atom['cn'] = len(_kept)
+                        _bonds = atom.get('bonds', [])
+                        if _bonds:
+                            atom['bonds'] = [b for b in _bonds if b[0] not in _nonframework]
+
             # Store bond information and prepare for atom typing
             for i, atom in enumerate(atoms):
                 # Skip water and ion residues if present
-                if atom.get('resname') in ['SOL', 'ION']:
+                if _is_solvent_or_ion(atom):
                     continue
                     
                 # Get neighbors from the bonds
@@ -514,7 +564,7 @@ def minff(atoms, Box, ffname='minff', rmaxlong=2.45, rmaxH=1.2, log=False, log_f
         # Assign atom types based on coordination and bond information
         for i, atom in enumerate(atoms):
             # Skip water and ion residues
-            if atom.get('resname') in ['SOL', 'ION']:
+            if _is_solvent_or_ion(atom):
                 continue
                 
             # Get neighbors from the bonds
@@ -1122,11 +1172,31 @@ def clayff(atoms, Box, ffname='clayff', rmaxlong=2.45, rmaxH=1.2, log=False, log
             # bonds, leaving every atom untyped (e.g. 'Al' instead of 'Alo' -> downstream KeyError).
             atoms, bond_index, angle_index = bond_angle(atoms, Box, rmaxH=rmaxH, rmaxM=rmaxlong,
                                                         same_molecule_only=False)
-            
+
+            # Drop water/ion neighbours from each FRAMEWORK atom's coordination before typing.
+            # bond_angle above is geometric, so an interlayer cation or nearby water would
+            # otherwise be counted as bonded to a surface oxygen and mistype it (e.g. Op -> O_ov).
+            # This is molid-independent (robust to per-atom molids from a PDB round-trip) and
+            # cheap: an O(N) classification + an O(bonds) neighbour filter. bond_angle itself
+            # is unchanged, so no extra neighbour-search cost is added.
+            _nonframework = {i for i, a in enumerate(atoms) if _is_solvent_or_ion(a)}
+            if _nonframework:
+                for i, atom in enumerate(atoms):
+                    if i in _nonframework:
+                        continue
+                    _neigh = atom.get('neigh', [])
+                    _kept = [j for j in _neigh if j not in _nonframework]
+                    if len(_kept) != len(_neigh):
+                        atom['neigh'] = _kept
+                        atom['cn'] = len(_kept)
+                        _bonds = atom.get('bonds', [])
+                        if _bonds:
+                            atom['bonds'] = [b for b in _bonds if b[0] not in _nonframework]
+
             # Store bond information and prepare for atom typing
             for i, atom in enumerate(atoms):
                 # Skip water and ion residues if present
-                if atom.get('resname') in ['SOL', 'ION']:
+                if _is_solvent_or_ion(atom):
                     continue
                     
                 # Get neighbors from the bonds
@@ -1150,7 +1220,7 @@ def clayff(atoms, Box, ffname='clayff', rmaxlong=2.45, rmaxH=1.2, log=False, log
         # Assign atom types based on coordination and bond information
         for i, atom in enumerate(atoms):
             # Skip water and ion residues
-            if atom.get('resname') in ['SOL', 'ION']:
+            if _is_solvent_or_ion(atom):
                 continue
                 
             # Get neighbors from the bonds
@@ -1263,10 +1333,9 @@ def clayff(atoms, Box, ffname='clayff', rmaxlong=2.45, rmaxH=1.2, log=False, log
                 avg_bond_dist = atom.get('avg_bond_dist', 0)
                 
                 if o_neighbors == 6:  # Octahedral Fe
-                    if avg_bond_dist < 2.07:  # Fe3+ site
-                        atom['fftype'] = 'Fe3o'
-                    else:  # Fe2+ site
-                        atom['fftype'] = 'Fe2o'
+                    # CLAYFF (Cygan 2004) uses a single octahedral Fe3+ type
+                    # (Feo, q=+1.575), not a Fe2+/Fe3+ split. CLAYFF_EXT declares Feo.
+                    atom['fftype'] = 'Feo'
                 elif o_neighbors == 4:  # Tetrahedral Fe
                     if avg_bond_dist < 2.0:  # Fe3+ site (typical distance cutoff for tetrahedral)
                         atom['fftype'] = 'Fe3t'
@@ -1450,8 +1519,10 @@ def clayff(atoms, Box, ffname='clayff', rmaxlong=2.45, rmaxH=1.2, log=False, log
             atom['type'] = atom['fftype']
     
     # Apply charges based on the clayff forcefield after atom typing is complete
-    atom_labels = ['Alo', 'Alt', 'Ale', 'Fe3o', 'Fe3t', 'Fe2o', 'Mgo', 'Mgh', 'Cao', 'Cah', 'Sit', 'Lio', 'H', 'Na', 'K', 'Cs', 'Ca', 'Cl']  
-    charges = [1.575, 1.575, 1.8125, 1.575, 1.575, 1.36, 1.36, 1.05, 1.36, 1.05, 2.1, 0.86, 0.425, 1.0, 1.0, 1.0, 2.0, -1.0]
+    # CLAYFF octahedral iron is the single Fe3+ type Feo (q=+1.575); Fe3t kept for the
+    # rare tetrahedral case. (Cygan 2004 — no Fe2+/Fe3+ octahedral split.)
+    atom_labels = ['Alo', 'Alt', 'Ale', 'Feo', 'Fe3t', 'Mgo', 'Mgh', 'Cao', 'Cah', 'Sit', 'Lio', 'H', 'Na', 'K', 'Cs', 'Ca', 'Cl']
+    charges = [1.575, 1.575, 1.8125, 1.575, 1.575, 1.36, 1.05, 1.36, 1.05, 2.1, 0.86, 0.425, 1.0, 1.0, 1.0, 2.0, -1.0]
     # By default, apply charges to all atoms (set resname=None)
     # To limit charge assignment to specific residues, provide a resname (e.g., 'MIN')
     atoms = charge_clayff(atoms, Box, atom_labels, charges, resname=None)

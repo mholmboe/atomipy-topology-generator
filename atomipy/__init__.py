@@ -114,6 +114,9 @@ displacement_distribution = analysis.displacement_distribution
 find_hbonds = analysis.find_hbonds
 hbonds_frames = analysis.hbonds_frames
 vacf = analysis.vacf
+from . import distortion
+tetrahedral_rotation = distortion.tetrahedral_rotation
+tetrahedral_rotation_files = distortion.tetrahedral_rotation_files
 from .bond_angle import bond_angle, bond_angle_dihedral
 
 # ===== Cell and coordinate transformation functions =====
@@ -169,6 +172,11 @@ reorder = build.reorder
 condense = build.condense
 create_grid = build.create_grid
 join_and_reorder = build.join_and_reorder
+split_slabs_by_molid = build.split_slabs_by_molid
+
+from . import node_cache
+save_node_state = node_cache.save_node_state
+load_node_state = node_cache.load_node_state
 
 # ===== Resname functions =====
 from .resname import assign_resname
@@ -216,9 +224,9 @@ try:
 except ImportError:
     pass
 
-# ===== Frozen dummy mineral (non-MINFF inorganics) =====
+# ===== Frozen dummy mineral / Dummy FF (inorganics not covered by MINFF/CLAYFF) =====
 try:
-    from .dummy_mineral import (assign_dummy_mineral_params, write_dummy_mineral_itp, ELEMENT_LJ,
+    from .dummy_mineral import (assign_dummy_mineral_params, write_dummy_mineral_itp,
                                 write_dummy_system_top, pauling_effective_charge,
                                 uff_lj, UFF_VDW,
                                 MINFF_LJ_SITES, MINFF_FRAMEWORK_ELEMENTS)
@@ -274,7 +282,8 @@ __all__ = [
     'direct_cartesian_to_fractional', 'direct_fractional_to_cartesian',
     'replicate_system', 'translate', 'rotate', 'place', 'center', 'update', 'scale', 'bend',
     'substitute', 'molecule', 'merge', 'slice', 'fit_box', 'remove', 'delete_sites', 'fuse_atoms', 'solvate', 'ionize', 'insert',
-    'add_H_atom', 'adjust_H_atom', 'adjust_Hw_atom', 'reorder', 'condense', 'create_grid', 'join_and_reorder',
+    'add_H_atom', 'adjust_H_atom', 'adjust_Hw_atom', 'reorder', 'condense', 'create_grid', 'join_and_reorder', 'split_slabs_by_molid',
+    'save_node_state', 'load_node_state',
     'is_centrosymmetric_along_z',
     'assign_resname', 'spc2tip4p', 'tip3p2tip4p',
     'composition', 'get_mol_sequence', 'get_mol_sequence_typed',
@@ -285,11 +294,11 @@ __all__ = [
     'compute_bvs', 'global_instability_index', 'load_bv_params', 'load_shannon_radii', 'bond_valence', 'summarize_bvs',
     'analyze_bvs', 'conf2bvs', 'add_hydrogens_bvs',
     'guess_oxidation_states', 'PAULING_EN',
-    'assign_dummy_mineral_params', 'write_dummy_mineral_itp', 'write_dummy_system_top', 'ELEMENT_LJ', 'pauling_effective_charge', 'uff_lj', 'UFF_VDW', 'MINFF_LJ_SITES', 'MINFF_FRAMEWORK_ELEMENTS',
+    'assign_dummy_mineral_params', 'write_dummy_mineral_itp', 'write_dummy_system_top', 'pauling_effective_charge', 'uff_lj', 'UFF_VDW', 'MINFF_LJ_SITES', 'MINFF_FRAMEWORK_ELEMENTS',
     'get_radius', 'bond_distance',
     'unwrap_coordinates', 'calculate_rdf', 'coordination_number', 'closest_atom', 'min_distances',
     'density_profile', 'rdf_frames', 'density_frames', 'msd', 'displacement_distribution',
-    'find_hbonds', 'hbonds_frames', 'vacf',
+    'find_hbonds', 'hbonds_frames', 'vacf', 'tetrahedral_rotation', 'tetrahedral_rotation_files',
     'xrd', 'occupancy_atom', 'atomic_scattering_factors', 'calculate_multiplicity', 'bragg_law',
     'miller_planes', 'd_spacing', 'cut_miller', 'cut_planes', 'hkil_to_hkl',
     'build_cell', 'make_lattice', 'lattice_types',

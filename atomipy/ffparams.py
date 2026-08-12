@@ -37,13 +37,13 @@ DEFAULT_TYPE_ALIASES = {
     # Common monovalent ions
     'Na': 'Na+',
     'K': 'K+',
-    'Cl': 'Cl−',  # Note: uses minus sign character
+    'Cl': 'Cl-',  # all ions are signed (ASCII +/-) in the JSON/itp; charge also in the charge column
     'Li': 'Li+',
     'Rb': 'Rb+',
     'Cs': 'Cs+',
-    'F': 'F−',
-    'Br': 'Br−',
-    'I': 'I−',
+    'F': 'F-',
+    'Br': 'Br-',
+    'I': 'I-',
     # Common divalent ions
     'Ca': 'Ca2+',
     'Mg': 'Mg2+',

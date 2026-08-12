@@ -6,13 +6,19 @@ For a material whose framework atom types the built-in force fields can't assign
 (e.g. MnO, NiO, Cr2O3, …), this builds a crude-but-usable model so it can still
 interact with water and solutes in a qualitative simulation:
 
-  * Partial charges  = ``charge_scale`` (default 0.5) × the guessed oxidation
-    state (see :func:`atomipy.guess_oxidation_states`). Half the formal charge
-    mirrors the reduced charges of CLAYFF / MINFF and keeps a neutral lattice
-    neutral.
-  * Lennard-Jones    = borrowed: every oxygen gets the OPC3 water oxygen
-    (σ=0.31743 nm, ε=0.68369 kJ/mol), and every metal/cation gets a small buried
-    metal site (default ``Alo``, σ=0.14410 nm). Hydrogens get zero LJ.
+  * Partial charges  = (default ``charge_mode='pauling'``) each cation gets a
+    Pauling effective charge and the anions balance it via a coordination-resolved
+    formula, keeping a neutral lattice neutral; the legacy ``'half'`` mode uses
+    ``charge_scale`` (default 0.5) × the guessed oxidation state
+    (see :func:`atomipy.guess_oxidation_states`).
+  * Lennard-Jones    = (default ``lj_mode='shannon'``) every oxygen gets the OPC3
+    water oxygen (σ=0.31743 nm, ε=0.68369 kJ/mol); hydrogens get zero LJ; every
+    other element M has its LJ minimum placed at the Shannon **crystal** M–O bond
+    distance (r_min matching, so r_min_M = 2·d_MO − r_min_O; ε_M = per-element UFF well
+    depth clamped to within one order of magnitude of the OPC3-O ε). Very short M–O
+    bonds (shorter than the OPC3 oxygen radius, e.g. tetrahedral Si⁴⁺) give M no LJ
+    (Coulomb only). A pure-metal structure uses neutral-atom radii. Other
+    modes ('element', 'minff') are available — see :func:`assign_dummy_mineral_params`.
   * The framework is **frozen** (atoms flagged ``frozen=True``; the OpenMM layer
     sets their mass to 0). Freezing removes the need for ANY bonded parameters —
     exactly what's missing for an unsupported framework — so only nonbonded
@@ -89,26 +95,6 @@ def uff_lj(element):
         return None
     x_i, d_i = entry
     return (round(x_i * _TWO_POW_NEG_SIXTH / 10.0, 6), round(d_i * _KCAL_TO_KJ, 6))
-
-# Element-appropriate metal Lennard-Jones (sigma_nm, epsilon_kJ/mol), for *pure
-# metals / alloys* where the borrowed buried-cation site is inappropriate. The
-# face-centred-cubic metals use well-validated 12-6 metallic parameters (good for
-# metal–water/biomolecule interfaces with Lorentz-Berthelot mixing); the remaining
-# metals use UFF (Rappe et al., JACS 1992) converted as sigma = x1 / 2^(1/6),
-# eps = D1·4.184. Generic/approximate — a qualitative frozen wall, not energetics.
-ELEMENT_LJ = {
-    # fcc metals — 12-6 metallic
-    'Al': (0.25527, 16.82), 'Ni': (0.22200, 23.64), 'Cu': (0.22770, 19.75),
-    'Pd': (0.24510, 25.73), 'Ag': (0.25740, 19.08), 'Pt': (0.24720, 32.64),
-    'Au': (0.25690, 22.13), 'Pb': (0.31190, 12.26),
-    # other common metals — UFF
-    'Li': (0.19457, 0.10460), 'Na': (0.23681, 0.12552), 'K': (0.30255, 0.14644),
-    'Mg': (0.23975, 0.46442), 'Ca': (0.26977, 0.99579), 'Sc': (0.26157, 0.07950),
-    'Ti': (0.25204, 0.07113), 'V': (0.24954, 0.06694), 'Cr': (0.23992, 0.06276),
-    'Mn': (0.23502, 0.05439), 'Fe': (0.23110, 0.05439), 'Co': (0.22798, 0.05858),
-    'Zn': (0.21934, 0.51882), 'Zr': (0.24793, 0.28886), 'Mo': (0.24224, 0.23430),
-    'Cd': (0.25373, 0.95395), 'W': (0.24358, 0.28033), 'Hg': (0.24099, 1.61084),
-}
 
 # Atomic masses (g/mol) for the topology. Frozen atoms get mass 0 in OpenMM, but
 # the .itp keeps real masses so the same topology is valid for a GROMACS export.
@@ -201,17 +187,62 @@ def _anion_charges_minff(atoms, ox, anion_idx, Box, verbose, rmaxlong=2.45, rmax
               f"(net charge will be non-zero).")
 
 
-def _element_lj(element):
-    """Best self-calculated LJ (sigma_nm, epsilon_kJ) for an element: the curated
-    ELEMENT_LJ value (metallic + selected UFF) if present, else UFF computed
-    from vdW data, else None."""
-    if element in ELEMENT_LJ:
-        return ELEMENT_LJ[element]
-    return uff_lj(element)
+
+
+_TWO_POW_SIXTH = 2.0 ** (1.0 / 6.0)   # r_min = 2^(1/6) * sigma
+
+# Most common oxidation state in oxides, per element — used to pick the Shannon
+# radius when an element has several tabulated oxidation states (the 'shannon' LJ
+# mode). The structure-guessed oxidation state is tried as a fallback.
+MOST_COMMON_OXIDE_OX = {
+    'Li': 1, 'Be': 2, 'B': 3, 'C': 4, 'N': 5, 'Na': 1, 'Mg': 2, 'Al': 3, 'Si': 4,
+    'P': 5, 'S': 6, 'Cl': -1, 'K': 1, 'Ca': 2, 'Sc': 3, 'Ti': 4, 'V': 3, 'Cr': 3,
+    'Mn': 2, 'Fe': 3, 'Co': 2, 'Ni': 2, 'Cu': 2, 'Zn': 2, 'Ga': 3, 'Ge': 4, 'As': 5,
+    'Se': -2, 'Br': -1, 'Rb': 1, 'Sr': 2, 'Y': 3, 'Zr': 4, 'Nb': 5, 'Mo': 6, 'Ag': 1,
+    'Cd': 2, 'In': 3, 'Sn': 4, 'Sb': 3, 'Te': -2, 'I': -1, 'Cs': 1, 'Ba': 2, 'La': 3,
+    'W': 6, 'Pb': 2, 'Bi': 3, 'F': -1,
+}
+
+
+def _shannon_rmin_lj(element, ox_candidates, coordination, radii, r_O_crystal,
+                     rmin_O, eps_O):
+    """LJ (sigma_nm, epsilon_kJ/mol) for a metal/anion M so the M–O LJ *minimum* sits
+    at the Shannon crystal M–O bond distance.
+
+    The M–O bond distance is ``d_MO = (r_M + r_O)`` from Shannon CRYSTAL radii. Under
+    Lorentz–Berthelot the M–O pair minimum is ``(r_min_M + r_min_O)/2``, so requiring it
+    to equal d_MO gives ``r_min_M = 2·d_MO − r_min_O`` and ``sigma_M = r_min_M / 2^(1/6)``.
+    Because the minimum is placed exactly at d_MO, the LJ force there is zero for ANY
+    epsilon, so epsilon (the well *depth*) is a separate, free choice: the per-element UFF
+    well depth, clamped to within one order of magnitude of the OPC3 oxygen epsilon
+    (``eps_O``) so every M has a depth comparable to water oxygen.
+
+    ``r_min_O`` is the OPC3 oxygen r_min (nm). Tries each oxidation state in
+    ``ox_candidates`` in order. Returns:
+      * (sigma_M, eps_M) when r_min_M > 0;
+      * (0.0, 0.0) when the bond is shorter than the OPC3 oxygen radius (r_min_M ≤ 0) —
+        M then has no LJ (Coulomb only), being a small buried, shielded, frozen core;
+      * None when no Shannon crystal radius exists for any candidate (caller → UFF).
+    """
+    from .radius import get_radius
+    for ox in ox_candidates:
+        if ox is None:
+            continue
+        rM = get_radius(element, int(ox), int(coordination), radii=radii, prefer='crystal')
+        if rM and rM > 0:
+            d_MO = (rM + r_O_crystal) / 10.0            # Angstrom -> nm
+            rmin_M = 2.0 * d_MO - rmin_O
+            if rmin_M > 1e-3:
+                _u = uff_lj(element)
+                _e = _u[1] if _u else eps_O             # per-element UFF well depth
+                eps_M = min(max(_e, eps_O / 10.0), eps_O * 10.0)   # within 1 order of OPC3 O
+                return (round(rmin_M / _TWO_POW_SIXTH, 6), round(eps_M, 6))
+            return (0.0, 0.0)                           # floored: M–O shorter than OPC3 O radius
+    return None
 
 
 def assign_dummy_mineral_params(atoms, Box=None, charge_mode='pauling', charge_scale=0.5,
-                                h_charge=0.4, lj_mode='element', metal_site='Alo',
+                                h_charge=0.4, lj_mode='shannon', metal_site='Alo',
                                 resname='DUM', rmaxlong=2.45, rmaxH=1.2,
                                 freeze=True, verbose=True):
     """Assign Dummy FF parameters to a mineral framework in place.
@@ -246,12 +277,24 @@ def assign_dummy_mineral_params(atoms, Box=None, charge_mode='pauling', charge_s
         Multiplier for the 'half' mode (default 0.5).
     h_charge : float
         Fixed hydrogen charge in 'pauling' mode (default 0.4).
-    lj_mode : {'element', 'minff'}
-        Lennard-Jones source. 'element' (default): the Dummy FF computes its OWN
-        per-element LJ from vdW data — ELEMENT_LJ (metallic + selected UFF)
-        where available, else UFF (σ = x_i/2^(1/6), ε = D_i) for every element
-        including O/F/H. 'minff': borrow from MINFF (O→OPC3, F→F⁻, H→none,
-        metals→`metal_site`), which gives stronger O–water attraction.
+    lj_mode : {'shannon', 'element', 'minff'}
+        Lennard-Jones source. 'shannon' (default):
+          * O (any oxygen) → the OPC3 water-oxygen LJ (σ=0.31743 nm, ε=0.68369 kJ/mol);
+          * H → zero LJ (σ=ε=0);
+          * every other element M → its LJ minimum is placed at the Shannon-crystal M–O
+            bond distance d_MO = r_M + r_O. Under Lorentz–Berthelot the M–O pair minimum
+            is (r_min_M + r_min_O)/2, so r_min_M = 2·d_MO − r_min_O(OPC3) and
+            σ_M = r_min_M / 2^(1/6). The well *depth* ε_M is independent of that (the force
+            is zero at d_MO for any ε): it is the per-element UFF well depth, clamped to
+            within one order of magnitude of the OPC3-oxygen ε. The oxidation state is the
+            element's most common one in oxides (see :data:`MOST_COMMON_OXIDE_OX`), falling
+            back to the structure-guessed state. If d_MO is shorter than the OPC3 oxygen
+            radius (r_min_M ≤ 0 — e.g. tetrahedral Si⁴⁺) M gets NO LJ (Coulomb only; it is
+            a small buried, shielded core). A PURE-METAL structure (no anions) instead uses
+            neutral-atom UFF vdW. Needs ``Box`` for coordination numbers.
+        'element': the Dummy FF's OWN per-element UFF LJ (σ = x_i/2^(1/6), ε = D_i·4.184)
+        for every element incl. O/F/H.
+        'minff': borrow from MINFF (O→OPC3, F→F⁻, H→none, metals→`metal_site`).
     metal_site : str
         MINFF LJ site used in 'minff' mode (and as the fallback for elements in
         no LJ table): 'Alo' (default), 'Sit', or 'Mgo'.
@@ -331,18 +374,43 @@ def assign_dummy_mineral_params(atoms, Box=None, charge_mode='pauling', charge_s
 
     # --- LJ, type, mass, freeze ---
     # lj_mode controls where Lennard-Jones parameters come from:
-    #   'element' (default) — the Dummy FF's OWN per-element LJ, computed from vdW
-    #       data: ELEMENT_LJ (metallic + selected UFF) where available, else
-    #       UFF (sigma = x_i/2^(1/6), epsilon = D_i) for every element incl. O/F/H.
-    #       No MINFF borrowing; each element gets its own size.
+    #   'shannon' (default) — O→OPC3 water-oxygen LJ, H→none, and every other element M
+    #       has its LJ minimum placed at the Shannon-crystal M–O bond distance (ε from
+    #       per-element UFF clamped near the OPC3-oxygen ε); see the docstring above.
+    #   'element' — the Dummy FF's OWN per-element UFF LJ (sigma = x_i/2^(1/6),
+    #       epsilon = D_i·4.184) for every element incl. O/F/H. Each element gets its
+    #       own size; no MINFF borrowing.
     #   'minff' — borrow from MINFF: O→OPC3 oxygen, F→F⁻, H→none, metals→the
     #       small buried-cation site (`metal_site`). Stronger O–water attraction.
-    # The curated metallic ELEMENT_LJ (12-6) only makes sense for a PURE
-    # metal/alloy. In an ionic framework (anions present) those deep metallic
-    # wells are wrong for a cation, so use the UFF vdW LJ for every element.
+    # All metal/vdW LJ comes from UFF (Rappe 1992).
     _pure_metal = not any(float(o) < 0 for o in ox)
     non_minff = set()
     fallback_elems = set()
+    floored_elems = set()
+
+    # 'shannon' mode needs per-atom coordination numbers, the Shannon table, and the
+    # OPC3 oxygen r_min / Shannon O radius for the M–O r_min matching.
+    shannon_radii = None
+    cn_list = None
+    _O_opc3_sig, _O_opc3_eps = MINFF_LJ_SITES['O_opc3']
+    _rmin_O_opc3 = _TWO_POW_SIXTH * _O_opc3_sig     # OPC3 oxygen r_min (nm)
+    _rO_crystal = 1.26                              # Shannon crystal O^2- radius (Angstrom); refined below
+    if lj_mode == 'shannon':
+        from .bond_valence import load_shannon_radii
+        from .radius import get_radius as _get_radius
+        shannon_radii = load_shannon_radii()
+        _rO_crystal = _get_radius('O', -2, 6, radii=shannon_radii, prefer='crystal') or 1.26
+        # Coordination number = geometric neighbour count. Reuse the 'neigh' populated
+        # by the charge step if present, else compute it once (needs Box).
+        if Box is not None and not all(a.get('neigh') is not None for a in framework):
+            try:
+                from .bond_angle import bond_angle
+                bond_angle(framework, Box, rmaxM=rmaxlong, rmaxH=rmaxH,
+                           same_molecule_only=False, verbose=False)
+            except Exception:
+                pass
+        cn_list = [max(1, len(a.get('neigh') or [])) for a in framework]
+
     for i, atom in enumerate(framework):
         el = elements[i]
         if el not in MINFF_FRAMEWORK_ELEMENTS:
@@ -356,9 +424,32 @@ def assign_dummy_mineral_params(atoms, Box=None, charge_mode='pauling', charge_s
                 atom['sigma'], atom['epsilon'] = MINFF_LJ_SITES['H']
             else:
                 atom['sigma'], atom['epsilon'] = metal_sigma, metal_eps
-        else:  # 'element' — self-calculated per-element LJ from vdW data
-            lj = _element_lj(el) if _pure_metal else uff_lj(el)
-            if lj is None:                      # exotic element not in any table
+        elif lj_mode == 'shannon':
+            # O -> OPC3 water-oxygen LJ; H -> no LJ; every other element -> its LJ minimum
+            # placed at the Shannon crystal M–O bond distance (r_min matching, ε=OPC3-O ε).
+            # A pure-metal structure (no anions) uses neutral-atom radii instead.
+            if el == 'O':
+                atom['sigma'], atom['epsilon'] = (_O_opc3_sig, _O_opc3_eps)
+            elif el == 'H':
+                atom['sigma'], atom['epsilon'] = (0.0, 0.0)
+            elif _pure_metal:
+                lj = uff_lj(el)                    # neutral-atom UFF vdW
+                if lj is None:
+                    lj = (metal_sigma, metal_eps); fallback_elems.add(el)
+                atom['sigma'], atom['epsilon'] = lj
+            else:
+                lj = _shannon_rmin_lj(
+                    el, [MOST_COMMON_OXIDE_OX.get(el), int(round(float(ox[i])))],
+                    cn_list[i], shannon_radii, _rO_crystal, _rmin_O_opc3, _O_opc3_eps)
+                if lj is None:                     # no Shannon crystal radius -> UFF
+                    lj = uff_lj(el) or (metal_sigma, metal_eps)
+                    fallback_elems.add(el)
+                elif lj == (0.0, 0.0):             # bond shorter than OPC3 O radius -> no LJ
+                    floored_elems.add(el)
+                atom['sigma'], atom['epsilon'] = lj
+        else:  # 'element' — self-calculated per-element UFF LJ from vdW data
+            lj = uff_lj(el)
+            if lj is None:                      # exotic element not in the UFF table
                 lj = (metal_sigma, metal_eps)
                 fallback_elems.add(el)
             atom['sigma'], atom['epsilon'] = lj
@@ -372,8 +463,18 @@ def assign_dummy_mineral_params(atoms, Box=None, charge_mode='pauling', charge_s
     net_charge = round(sum(a['charge'] for a in framework), 6)
     if lj_mode == 'minff':
         _lj_desc = f"MINFF-borrowed (O=OPC3, F=F⁻, metals=site '{metal_site}')"
+    elif lj_mode == 'shannon':
+        if _pure_metal:
+            _lj_desc = "pure metal — neutral-atom UFF vdW; H=none"
+        else:
+            _lj_desc = ("O=OPC3, H=none, others: LJ minimum at Shannon-crystal M–O bond "
+                        "distance (r_min matching), ε=UFF clamped to ±1 order of OPC3-O ε")
+        if fallback_elems:
+            _lj_desc += f"; UFF fallback for {sorted(fallback_elems)}"
+        if floored_elems:
+            _lj_desc += f"; no-LJ (bond < OPC3-O radius) for {sorted(floored_elems)}"
     else:
-        _lj_desc = "self-calculated per-element (ELEMENT_LJ/UFF)"
+        _lj_desc = "self-calculated per-element UFF vdW"
         if fallback_elems:
             _lj_desc += f"; borrowed '{metal_site}' for {sorted(fallback_elems)}"
     report = {
@@ -418,13 +519,30 @@ def _unique_dummy_types(atoms):
     return types
 
 
-def write_dummy_mineral_itp(atoms, file_path, mol_name='DUM'):
+def _format_dummy_atomtypes(types):
+    """Return the ``[ atomtypes ]`` block text for a dummy-type map (the dict from
+    :func:`_unique_dummy_types`). Shared by the standalone .itp writer and the
+    consolidated (hoisted) ``[ atomtypes ]`` block in :func:`write_dummy_system_top`."""
+    out = ["[ atomtypes ]",
+           ";name  at.num   mass      charge  ptype     sigma       epsilon"]
+    for name, (el, sig, eps, mass, atn) in types.items():
+        out.append(f"{name:<6} {atn:>4}  {mass:>9.5f}  {0.0:>8.5f}  A  "
+                   f"{sig:>11.6f} {eps:>11.6f}")
+    return "\n".join(out) + "\n"
+
+
+def write_dummy_mineral_itp(atoms, file_path, mol_name='DUM', include_atomtypes=True):
     """Write a self-contained GROMACS .itp for a dummy mineral framework.
 
     Emits its own ``[ atomtypes ]`` (the borrowed LJ sites), a bond-free
     ``[ moleculetype ]`` and ``[ atoms ]`` (per-atom dummy type + scaled charge).
     No bonds/angles/dihedrals — the framework is held rigid by freezing, so the
     topology needs no MINFF bonded parameters. #include this like a GAFF itp.
+
+    ``include_atomtypes=False`` writes a moleculetype-ONLY itp (no ``[ atomtypes ]``);
+    used by :func:`write_dummy_system_top`, which hoists all atom types into a single
+    ``[ atomtypes ]`` block in the .top ahead of every moleculetype (GROMACS forbids
+    an ``[ atomtypes ]`` after a ``[ moleculetype ]``).
 
     Call :func:`assign_dummy_mineral_params` first.
     """
@@ -433,12 +551,9 @@ def write_dummy_mineral_itp(atoms, file_path, mol_name='DUM'):
         f.write(f"; {provenance_string()} — Dummy FF mineral topology\n")
         f.write(f"; FROZEN framework — nonbonded only (EM/NVT). Qualitative model.\n\n")
 
-        f.write("[ atomtypes ]\n")
-        f.write(";name  at.num   mass      charge  ptype     sigma       epsilon\n")
-        for name, (el, sig, eps, mass, atn) in types.items():
-            f.write(f"{name:<6} {atn:>4}  {mass:>9.5f}  {0.0:>8.5f}  A  "
-                    f"{sig:>11.6f} {eps:>11.6f}\n")
-        f.write("\n")
+        if include_atomtypes:
+            f.write(_format_dummy_atomtypes(types))
+            f.write("\n")
 
         f.write("[ moleculetype ]\n")
         f.write(";name            nrexcl\n")
@@ -483,6 +598,43 @@ def _parse_itp_moltype(itp_path):
             elif section == 'atoms':
                 natoms += 1
     return name, natoms
+
+
+def _hoist_itp_atomtypes(itp_path, out_path):
+    """Split a GROMACS .itp so its atom types can be hoisted into the .top.
+
+    Extracts the ``[ atomtypes ]`` data rows and writes a copy of the .itp WITHOUT
+    the ``[ atomtypes ]`` and ``[ defaults ]`` sections to ``out_path`` (a
+    moleculetype-only include). GROMACS requires every ``[ atomtypes ]`` to appear
+    before the first ``[ moleculetype ]``; an organic (GAFF/OpenFF) .itp bundles its
+    atomtypes with its moleculetype, so when combined with the dummy DUM moleculetype
+    the organic atomtypes would illegally follow a moleculetype. Hoisting the rows
+    into the .top's consolidated ``[ atomtypes ]`` avoids that.
+
+    Returns a list of ``(type_name, raw_line)`` for the atomtypes rows (verbatim, so
+    the original column format is preserved). ``[ defaults ]`` is dropped from the
+    copy so it can't duplicate/override the .top's own ``[ defaults ]``.
+    """
+    at_rows, kept, section = [], [], None
+    with open(itp_path, 'r', encoding='utf-8', errors='ignore') as f:
+        for line in f:
+            s = line.split(';', 1)[0].strip()
+            if s.startswith('['):
+                section = s.strip('[] ').lower()
+                if section in ('atomtypes', 'defaults'):
+                    continue           # drop these section headers from the copy
+                kept.append(line)
+                continue
+            if section == 'atomtypes':
+                if s:                  # a data row (not a comment/blank)
+                    at_rows.append((s.split()[0], line.rstrip('\n')))
+                continue               # skip all atomtypes lines from the copy
+            if section == 'defaults':
+                continue               # skip [ defaults ] body entirely
+            kept.append(line)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.writelines(kept)
+    return at_rows
 
 
 def write_dummy_system_top(atoms, box, out_top, out_gro, water_model='spce',
@@ -534,7 +686,7 @@ def write_dummy_system_top(atoms, box, out_top, out_gro, water_model='spce',
     water = [a for a in rest if str(a.get('resname', '')).upper() in _SOLVENT_RES]
     nonwater = [a for a in rest if str(a.get('resname', '')).upper() not in _SOLVENT_RES]
 
-    # Map each organic .itp to (moltype name, atoms/molecule), and write the dummy itp.
+    # Map each organic .itp to (moltype name, atoms/molecule).
     org_info = []
     for oi in organic_itps:
         p = oi if _os.path.isabs(oi) else _os.path.join(out_dir, _os.path.basename(oi))
@@ -546,8 +698,32 @@ def write_dummy_system_top(atoms, box, out_top, out_gro, water_model='spce',
             pass
     natoms_to_moltype = {nat: mt for (_f, mt, nat) in org_info}
 
+    # Hoist the [ atomtypes ] out of each organic .itp. GROMACS forbids an
+    # [ atomtypes ] after a [ moleculetype ], and organic (GAFF/OpenFF) itps bundle
+    # their atom types with their moleculetype — so combined with the DUM moleculetype
+    # the organic atomtypes would come too late. We collect the rows (deduped by type
+    # name) for the .top's consolidated [ atomtypes ] and #include a moleculetype-only
+    # stripped copy of each organic .itp instead of the original.
+    hoisted_at, seen_at, org_includes = [], set(), []
+    for oi in organic_itps:
+        src = oi if _os.path.isabs(oi) else _os.path.join(out_dir, _os.path.basename(oi))
+        stem = _os.path.splitext(_os.path.basename(oi))[0]
+        stripped = f"{stem}_noat.itp"
+        try:
+            rows = _hoist_itp_atomtypes(src, _os.path.join(out_dir, stripped))
+        except OSError:
+            org_includes.append(_os.path.basename(oi))   # unreadable — fall back to as-is
+            continue
+        for name, raw in rows:
+            if name not in seen_at:
+                seen_at.add(name); hoisted_at.append(raw)
+        org_includes.append(stripped)
+
+    # Dummy framework atom types + a moleculetype-ONLY dummy .itp (its atomtypes are
+    # written into the .top's consolidated [ atomtypes ] block below, ahead of any moltype).
+    dummy_types = _unique_dummy_types(frame)
     itp_path = _os.path.join(out_dir, _os.path.basename(dummy_itp))
-    write_dummy_mineral_itp(frame, itp_path, mol_name=mol_name)
+    write_dummy_mineral_itp(frame, itp_path, mol_name=mol_name, include_atomtypes=False)
 
     # Bucket the non-water solute by molid group: multi-atom groups are organic
     # molecules (keyed by their moleculetype), single-atom groups are monatomic
@@ -591,20 +767,35 @@ def write_dummy_system_top(atoms, box, out_top, out_gro, water_model='spce',
         f.write('[ defaults ]\n')
         f.write('; nbfunc   comb-rule   gen-pairs   fudgeLJ   fudgeQQ\n')
         f.write('  1        2           yes         0.5       0.8333333333\n\n')
-        f.write(f'#include "{_os.path.basename(dummy_itp)}"\n')   # dummy [atomtypes] + DUM moltype
-        for oi in organic_itps:
-            f.write(f'#include "{_os.path.basename(oi)}"\n')       # organic [atomtypes] + moltype
+        # GROMACS requires ALL [ atomtypes ] to appear before the first
+        # [ moleculetype ] (an [atomtypes] after a moleculetype is a fatal
+        # "Invalid order for directive atomtypes"). So write every atom type FIRST —
+        # the dummy framework types, then any hoisted organic (GAFF/OpenFF) types,
+        # then the min.ff water/ion types (ffnonbonded.itp) — and only THEN the
+        # moleculetypes (dummy, organics, water, ions). The #defines must precede
+        # ffnonbonded, which is #ifdef-guarded on the water/ion model.
+        f.write(_format_dummy_atomtypes(dummy_types))   # dummy framework [atomtypes]
         f.write('\n')
+        if hoisted_at:
+            f.write('[ atomtypes ]\n')
+            f.write('; hoisted from organic .itp(s) so all atomtypes precede the moleculetypes\n')
+            for raw in hoisted_at:
+                f.write(raw + '\n')
+            f.write('\n')
         if n_water or ion_seq:
             f.write(f'#define {water_define}\n')
             if ion_define:
                 f.write(f'#define {ion_define}\n')   # activates ion atomtypes + moleculetypes
-            f.write('#include "min.ff/ffnonbonded.itp"\n')
-            if n_water:
-                f.write(f'#include "min.ff/{wm_file}.itp"\n')
-            if ion_seq:
-                f.write('#include "min.ff/ions.itp"\n')
+            f.write('#include "min.ff/ffnonbonded.itp"\n')   # water/ion [atomtypes]
             f.write('\n')
+        f.write(f'#include "{_os.path.basename(dummy_itp)}"\n')   # DUM [moleculetype] (atomtypes hoisted above)
+        for inc in org_includes:
+            f.write(f'#include "{inc}"\n')                        # organic [moleculetype] (atomtypes hoisted above)
+        if n_water:
+            f.write(f'#include "min.ff/{wm_file}.itp"\n')
+        if ion_seq:
+            f.write('#include "min.ff/ions.itp"\n')
+        f.write('\n')
         f.write('[ system ]\n')
         f.write('Frozen dummy mineral + solvent\n\n')
         f.write('[ molecules ]\n')

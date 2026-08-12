@@ -2380,97 +2380,18 @@
         }
       }
     },
-    "CaF2_k0": {
-      "atomtypes": {
-        "Cao": {
-          "mass": 40.078,
-          "charge": 1.66,
-          "ptype": "A",
-          "sigma": 0.269776,
-          "epsilon": 1.543146
-        },
-        "Ob": {
-          "mass": 15.99941,
-          "charge": -1.66,
-          "ptype": "A",
-          "sigma": 0.317427,
-          "epsilon": 0.68369
-        }
-      }
-    },
-    "CaF2_k250": {
-      "atomtypes": {
-        "Cao": {
-          "mass": 40.078,
-          "charge": 1.66,
-          "ptype": "A",
-          "sigma": 0.270456,
-          "epsilon": 1.496099
-        },
-        "Ob": {
-          "mass": 15.99941,
-          "charge": -1.66,
-          "ptype": "A",
-          "sigma": 0.317427,
-          "epsilon": 0.68369
-        }
-      }
-    },
-    "CaF2_k500": {
-      "atomtypes": {
-        "Cao": {
-          "mass": 40.078,
-          "charge": 1.66,
-          "ptype": "A",
-          "sigma": 0.270718,
-          "epsilon": 1.532592
-        },
-        "Ob": {
-          "mass": 15.99941,
-          "charge": -1.66,
-          "ptype": "A",
-          "sigma": 0.317427,
-          "epsilon": 0.68369
-        }
-      }
-    },
-    "CaF2_k1500": {
-      "atomtypes": {
-        "Cao": {
-          "mass": 40.078,
-          "charge": 1.66,
-          "ptype": "A",
-          "sigma": 0.270061,
-          "epsilon": 1.554735
-        },
-        "Ob": {
-          "mass": 15.99941,
-          "charge": -1.66,
-          "ptype": "A",
-          "sigma": 0.317427,
-          "epsilon": 0.68369
-        }
-      }
-    },
     "CaO_k0": {
       "atomtypes": {
-        "H": {
-          "mass": 1.00794,
-          "charge": 0.4,
-          "ptype": "A",
-          "sigma": 0.0,
-          "epsilon": 0.0
-        },
         "Cao": {
           "mass": 40.078,
           "charge": 1.66,
           "ptype": "A",
-          "sigma": 0.249012,
-          "epsilon": 1.379411
+          "sigma": 0.26931,
+          "epsilon": 1.577304
         },
-        "Oh": {
+        "Ob": {
           "mass": 15.99941,
-          "charge": -1.23,
+          "charge": -1.66,
           "ptype": "A",
           "sigma": 0.317427,
           "epsilon": 0.68369
@@ -2479,23 +2400,16 @@
     },
     "CaO_k250": {
       "atomtypes": {
-        "H": {
-          "mass": 1.00794,
-          "charge": 0.4,
-          "ptype": "A",
-          "sigma": 0.0,
-          "epsilon": 0.0
-        },
         "Cao": {
           "mass": 40.078,
           "charge": 1.66,
           "ptype": "A",
-          "sigma": 0.251187,
-          "epsilon": 1.39146
+          "sigma": 0.269824,
+          "epsilon": 1.578207
         },
-        "Oh": {
+        "Ob": {
           "mass": 15.99941,
-          "charge": -1.23,
+          "charge": -1.66,
           "ptype": "A",
           "sigma": 0.317427,
           "epsilon": 0.68369
@@ -2504,23 +2418,16 @@
     },
     "CaO_k500": {
       "atomtypes": {
-        "H": {
-          "mass": 1.00794,
-          "charge": 0.4,
-          "ptype": "A",
-          "sigma": 0.0,
-          "epsilon": 0.0
-        },
         "Cao": {
           "mass": 40.078,
           "charge": 1.66,
           "ptype": "A",
-          "sigma": 0.252101,
-          "epsilon": 1.39738
+          "sigma": 0.270067,
+          "epsilon": 1.577898
         },
-        "Oh": {
+        "Ob": {
           "mass": 15.99941,
-          "charge": -1.23,
+          "charge": -1.66,
           "ptype": "A",
           "sigma": 0.317427,
           "epsilon": 0.68369
@@ -2529,23 +2436,16 @@
     },
     "CaO_k1500": {
       "atomtypes": {
-        "H": {
-          "mass": 1.00794,
-          "charge": 0.4,
-          "ptype": "A",
-          "sigma": 0.0,
-          "epsilon": 0.0
-        },
         "Cao": {
           "mass": 40.078,
           "charge": 1.66,
           "ptype": "A",
-          "sigma": 0.252984,
-          "epsilon": 1.422867
+          "sigma": 0.269902,
+          "epsilon": 1.593755
         },
-        "Oh": {
+        "Ob": {
           "mass": 15.99941,
-          "charge": -1.23,
+          "charge": -1.66,
           "ptype": "A",
           "sigma": 0.317427,
           "epsilon": 0.68369
@@ -2554,73 +2454,173 @@
     },
     "Portlandite_k0": {
       "atomtypes": {
-        "Fs": {
-          "mass": 18.9984,
-          "charge": -0.76,
+        "H": {
+          "mass": 1.00794,
+          "charge": 0.4,
           "ptype": "A",
-          "sigma": 0.303053,
-          "epsilon": 0.184684
+          "sigma": 0.0,
+          "epsilon": 0.0
         },
         "Cah": {
           "mass": 40.078,
           "charge": 1.52,
           "ptype": "A",
-          "sigma": 0.275757,
-          "epsilon": 0.872831
+          "sigma": 0.252334,
+          "epsilon": 0.867839
+        },
+        "Oh": {
+          "mass": 15.99941,
+          "charge": -1.16,
+          "ptype": "A",
+          "sigma": 0.317427,
+          "epsilon": 0.68369
         }
       }
     },
     "Portlandite_k250": {
       "atomtypes": {
-        "Fs": {
-          "mass": 18.9984,
-          "charge": -0.76,
+        "H": {
+          "mass": 1.00794,
+          "charge": 0.4,
           "ptype": "A",
-          "sigma": 0.303362,
-          "epsilon": 0.188292
+          "sigma": 0.0,
+          "epsilon": 0.0
         },
         "Cah": {
           "mass": 40.078,
           "charge": 1.52,
           "ptype": "A",
-          "sigma": 0.27595,
-          "epsilon": 0.890203
+          "sigma": 0.253696,
+          "epsilon": 0.903701
+        },
+        "Oh": {
+          "mass": 15.99941,
+          "charge": -1.16,
+          "ptype": "A",
+          "sigma": 0.317427,
+          "epsilon": 0.68369
         }
       }
     },
     "Portlandite_k500": {
       "atomtypes": {
-        "Fs": {
-          "mass": 18.9984,
-          "charge": -0.76,
+        "H": {
+          "mass": 1.00794,
+          "charge": 0.4,
           "ptype": "A",
-          "sigma": 0.303294,
-          "epsilon": 0.188092
+          "sigma": 0.0,
+          "epsilon": 0.0
         },
         "Cah": {
           "mass": 40.078,
           "charge": 1.52,
           "ptype": "A",
-          "sigma": 0.276708,
-          "epsilon": 0.889614
+          "sigma": 0.262071,
+          "epsilon": 0.63896
+        },
+        "Oh": {
+          "mass": 15.99941,
+          "charge": -1.16,
+          "ptype": "A",
+          "sigma": 0.317427,
+          "epsilon": 0.68369
         }
       }
     },
     "Portlandite_k1500": {
       "atomtypes": {
-        "Fs": {
-          "mass": 18.9984,
-          "charge": -0.76,
+        "H": {
+          "mass": 1.00794,
+          "charge": 0.4,
           "ptype": "A",
-          "sigma": 0.303211,
-          "epsilon": 0.192663
+          "sigma": 0.0,
+          "epsilon": 0.0
         },
         "Cah": {
           "mass": 40.078,
           "charge": 1.52,
           "ptype": "A",
-          "sigma": 0.276169,
-          "epsilon": 0.910568
+          "sigma": 0.255784,
+          "epsilon": 0.906193
+        },
+        "Oh": {
+          "mass": 15.99941,
+          "charge": -1.16,
+          "ptype": "A",
+          "sigma": 0.317427,
+          "epsilon": 0.68369
+        }
+      }
+    },
+    "CaF2_k0": {
+      "atomtypes": {
+        "Fs": {
+          "mass": 18.9984,
+          "charge": -0.76,
+          "ptype": "A",
+          "sigma": 0.316767,
+          "epsilon": 0.197396
+        },
+        "Cah": {
+          "mass": 40.078,
+          "charge": 1.52,
+          "ptype": "A",
+          "sigma": 0.255603,
+          "epsilon": 0.891915
+        }
+      }
+    },
+    "CaF2_k250": {
+      "atomtypes": {
+        "Fs": {
+          "mass": 18.9984,
+          "charge": -0.76,
+          "ptype": "A",
+          "sigma": 0.317848,
+          "epsilon": 0.194159
+        },
+        "Cah": {
+          "mass": 40.078,
+          "charge": 1.52,
+          "ptype": "A",
+          "sigma": 0.2556,
+          "epsilon": 0.931942
+        }
+      }
+    },
+    "CaF2_k500": {
+      "atomtypes": {
+        "Fs": {
+          "mass": 18.9984,
+          "charge": -0.76,
+          "ptype": "A",
+          "sigma": 0.320267,
+          "epsilon": 0.185651
+        },
+        "Cah": {
+          "mass": 40.078,
+          "charge": 1.52,
+          "ptype": "A",
+          "sigma": 0.255225,
+          "epsilon": 0.88917
+        }
+      }
+    },
+    "CaF2_k1500": {
+      "atomtypes": {
+        "Fs": {
+          "mass": 18.9984,
+          "charge": -0.76,
+          "ptype": "A",
+          "sigma": 0.317199,
+          "epsilon": 0.19419
+        },
+        "Cah": {
+          "mass": 40.078,
+          "charge": 1.52,
+          "ptype": "A",
+          "sigma": 0.257873,
+          "epsilon": 0.929519
         }
       }
     },
@@ -3266,22 +3266,22 @@
           "mass": 18.9984,
           "charge": -0.87,
           "ptype": "A",
-          "sigma": 0.31238,
-          "epsilon": 0.192567
+          "sigma": 0.325503,
+          "epsilon": 0.191707
         },
         "Mgh": {
           "mass": 24.305,
           "charge": 1.74,
           "ptype": "A",
-          "sigma": 0.198319,
-          "epsilon": 1.037432
+          "sigma": 0.190547,
+          "epsilon": 1.001225
         },
         "Sit": {
           "mass": 28.08538,
           "charge": 1.884,
           "ptype": "A",
-          "sigma": 0.069803,
-          "epsilon": 0.38043
+          "sigma": 0.073613,
+          "epsilon": 0.379939
         },
         "Ob": {
           "mass": 15.99941,
@@ -3305,22 +3305,22 @@
           "mass": 18.9984,
           "charge": -0.87,
           "ptype": "A",
-          "sigma": 0.311255,
-          "epsilon": 0.184818
+          "sigma": 0.31158,
+          "epsilon": 0.187973
         },
         "Mgh": {
           "mass": 24.305,
           "charge": 1.74,
           "ptype": "A",
-          "sigma": 0.198319,
-          "epsilon": 1.037432
+          "sigma": 0.190547,
+          "epsilon": 1.001225
         },
         "Sit": {
           "mass": 28.08538,
           "charge": 1.884,
           "ptype": "A",
-          "sigma": 0.082297,
-          "epsilon": 0.429442
+          "sigma": 0.091627,
+          "epsilon": 0.441924
         },
         "Ob": {
           "mass": 15.99941,
@@ -3344,22 +3344,22 @@
           "mass": 18.9984,
           "charge": -0.87,
           "ptype": "A",
-          "sigma": 0.305207,
-          "epsilon": 0.188157
+          "sigma": 0.320483,
+          "epsilon": 0.179752
         },
         "Mgh": {
           "mass": 24.305,
           "charge": 1.74,
           "ptype": "A",
-          "sigma": 0.198319,
-          "epsilon": 1.037432
+          "sigma": 0.190547,
+          "epsilon": 1.001225
         },
         "Sit": {
           "mass": 28.08538,
           "charge": 1.884,
           "ptype": "A",
-          "sigma": 0.091267,
-          "epsilon": 0.450107
+          "sigma": 0.094879,
+          "epsilon": 0.443316
         },
         "Ob": {
           "mass": 15.99941,
@@ -3383,22 +3383,22 @@
           "mass": 18.9984,
           "charge": -0.87,
           "ptype": "A",
-          "sigma": 0.310902,
-          "epsilon": 0.187347
+          "sigma": 0.323329,
+          "epsilon": 0.190721
         },
         "Mgh": {
           "mass": 24.305,
           "charge": 1.74,
           "ptype": "A",
-          "sigma": 0.198319,
-          "epsilon": 1.037432
+          "sigma": 0.190547,
+          "epsilon": 1.001225
         },
         "Sit": {
           "mass": 28.08538,
           "charge": 1.884,
           "ptype": "A",
-          "sigma": 0.097114,
-          "epsilon": 0.459656
+          "sigma": 0.101552,
+          "epsilon": 0.464932
         },
         "Ob": {
           "mass": 15.99941,
@@ -7441,28 +7441,28 @@
           "sigma": 0.3601,
           "epsilon": 0.37596
         },
-        "F": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.402152,
           "epsilon": 0.030964
         },
-        "Cl": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.48305,
           "epsilon": 0.05349
         },
-        "Br": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.49017,
           "epsilon": 0.11279
         },
-        "I": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -7508,28 +7508,28 @@
           "sigma": 0.3601,
           "epsilon": 0.37596
         },
-        "F": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.402152,
           "epsilon": 0.030964
         },
-        "Cl": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.48305,
           "epsilon": 0.05349
         },
-        "Br": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.49017,
           "epsilon": 0.11279
         },
-        "I": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -7575,28 +7575,28 @@
           "sigma": 0.352083,
           "epsilon": 1.70096
         },
-        "F": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.410348,
           "epsilon": 0.01407
         },
-        "Cl": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.447766,
           "epsilon": 0.14891
         },
-        "Br": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.464693,
           "epsilon": 0.24541
         },
-        "I": {
+        "I-": {
           "mass": 126.90447,
           "charge": -1.0,
           "ptype": "A",
@@ -7642,35 +7642,28 @@
           "sigma": 0.336403,
           "epsilon": 1.6503
         },
-        "F": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.45222,
           "epsilon": 0.00659
         },
-        "Cl": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.491776,
           "epsilon": 0.04879
         },
-        "Cls": {
-          "mass": 35.453,
-          "charge": -1.0,
-          "ptype": "A",
-          "sigma": 0.491776,
-          "epsilon": 0.04879
-        },
-        "Br": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.493202,
           "epsilon": 0.1271
         },
-        "I": {
+        "I-": {
           "mass": 126.90447,
           "charge": -1.0,
           "ptype": "A",
@@ -7716,28 +7709,28 @@
           "sigma": 0.336403,
           "epsilon": 1.6503
         },
-        "F": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.45222,
           "epsilon": 0.00659
         },
-        "Cl": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.491776,
           "epsilon": 0.04879
         },
-        "Br": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
           "sigma": 0.493202,
           "epsilon": 0.1271
         },
-        "I": {
+        "I-": {
           "mass": 126.90447,
           "charge": -1.0,
           "ptype": "A",
@@ -7875,7 +7868,7 @@
           "sigma": 0.234306,
           "epsilon": 0.0248938
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -7903,7 +7896,7 @@
           "sigma": 0.261033,
           "epsilon": 0.12172
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -7924,7 +7917,7 @@
           "sigma": 0.21631,
           "epsilon": 0.00582396
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -7945,7 +7938,7 @@
           "sigma": 0.26727,
           "epsilon": 0.163169
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -7977,7 +7970,7 @@
           "sigma": 0.22415,
           "epsilon": 0.011468
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -8005,7 +7998,7 @@
           "sigma": 0.259073,
           "epsilon": 0.110416
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -8026,7 +8019,7 @@
           "sigma": 0.21239,
           "epsilon": 0.00403312
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -8047,7 +8040,7 @@
           "sigma": 0.236979,
           "epsilon": 0.0299964
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -8247,7 +8240,7 @@
           "sigma": 0.225754,
           "epsilon": 0.0130568
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -8275,7 +8268,7 @@
           "sigma": 0.262815,
           "epsilon": 0.132695
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -8296,7 +8289,7 @@
           "sigma": 0.213994,
           "epsilon": 0.00469863
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -8317,7 +8310,7 @@
           "sigma": 0.238939,
           "epsilon": 0.0342432
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -8517,7 +8510,7 @@
           "sigma": 0.218448,
           "epsilon": 0.00705782
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -8545,7 +8538,7 @@
           "sigma": 0.255153,
           "epsilon": 0.0901244
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -8566,7 +8559,7 @@
           "sigma": 0.205976,
           "epsilon": 0.00211376
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -8587,7 +8580,7 @@
           "sigma": 0.230565,
           "epsilon": 0.0189478
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -8787,7 +8780,7 @@
           "sigma": 0.226288,
           "epsilon": 0.0136252
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -8801,7 +8794,7 @@
           "sigma": 0.261746,
           "epsilon": 0.126029
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -8822,7 +8815,7 @@
           "sigma": 0.213994,
           "epsilon": 0.00469863
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -8843,7 +8836,7 @@
           "sigma": 0.23787,
           "epsilon": 0.0318714
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -9211,7 +9204,7 @@
           "sigma": 0.221299,
           "epsilon": 0.00903987
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -9225,7 +9218,7 @@
           "sigma": 0.26139,
           "epsilon": 0.123861
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -9246,7 +9239,7 @@
           "sigma": 0.210252,
           "epsilon": 0.00327243
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -9267,7 +9260,7 @@
           "sigma": 0.234485,
           "epsilon": 0.0252106
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -9635,7 +9628,7 @@
           "sigma": 0.224506,
           "epsilon": 0.0118064
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -9649,7 +9642,7 @@
           "sigma": 0.259964,
           "epsilon": 0.115455
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -9670,7 +9663,7 @@
           "sigma": 0.21239,
           "epsilon": 0.00403312
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -9691,7 +9684,7 @@
           "sigma": 0.236623,
           "epsilon": 0.0292714
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -10059,7 +10052,7 @@
           "sigma": 0.220943,
           "epsilon": 0.00876912
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -10073,7 +10066,7 @@
           "sigma": 0.258004,
           "epsilon": 0.104581
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -10094,7 +10087,7 @@
           "sigma": 0.208827,
           "epsilon": 0.00283692
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -10115,7 +10108,7 @@
           "sigma": 0.23395,
           "epsilon": 0.0242697
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -10483,7 +10476,7 @@
           "sigma": 0.235375,
           "epsilon": 0.0268437
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -10497,7 +10490,7 @@
           "sigma": 0.261924,
           "epsilon": 0.127123
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -10518,7 +10511,7 @@
           "sigma": 0.216132,
           "epsilon": 0.00572995
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -10539,7 +10532,7 @@
           "sigma": 0.267626,
           "epsilon": 0.1658
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -10851,7 +10844,7 @@
           "sigma": 0.232525,
           "epsilon": 0.0218984
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -10865,7 +10858,7 @@
           "sigma": 0.256579,
           "epsilon": 0.0971555
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -10886,7 +10879,7 @@
           "sigma": 0.213994,
           "epsilon": 0.00469863
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -10907,7 +10900,7 @@
           "sigma": 0.26531,
           "epsilon": 0.149216
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -11219,7 +11212,7 @@
           "sigma": 0.235197,
           "epsilon": 0.0265105
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -11233,7 +11226,7 @@
           "sigma": 0.260142,
           "epsilon": 0.116483
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -11254,7 +11247,7 @@
           "sigma": 0.21631,
           "epsilon": 0.00582396
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -11275,7 +11268,7 @@
           "sigma": 0.268161,
           "epsilon": 0.1698
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -11587,7 +11580,7 @@
           "sigma": 0.232703,
           "epsilon": 0.0221842
         },
-        "F\u2212": {
+        "F-": {
           "mass": 18.9984,
           "charge": -1.0,
           "ptype": "A",
@@ -11601,7 +11594,7 @@
           "sigma": 0.258361,
           "epsilon": 0.1065
         },
-        "Cl\u2212": {
+        "Cl-": {
           "mass": 35.453,
           "charge": -1.0,
           "ptype": "A",
@@ -11622,7 +11615,7 @@
           "sigma": 0.215241,
           "epsilon": 0.00527904
         },
-        "Br\u2212": {
+        "Br-": {
           "mass": 79.904,
           "charge": -1.0,
           "ptype": "A",
@@ -11643,7 +11636,7 @@
           "sigma": 0.263884,
           "epsilon": 0.139608
         },
-        "I\u2212": {
+        "I-": {
           "mass": 126.9045,
           "charge": -1.0,
           "ptype": "A",
@@ -13610,10 +13603,6 @@
       "Magnetite_k250",
       "Magnetite_k500",
       "Magnetite_k1500",
-      "CaF2_k0",
-      "CaF2_k250",
-      "CaF2_k500",
-      "CaF2_k1500",
       "CaO_k0",
       "CaO_k250",
       "CaO_k500",
@@ -13622,6 +13611,10 @@
       "Portlandite_k250",
       "Portlandite_k500",
       "Portlandite_k1500",
+      "CaF2_k0",
+      "CaF2_k250",
+      "CaF2_k500",
+      "CaF2_k1500",
       "Nontronite_k0",
       "Nontronite_k250",
       "Nontronite_k500",
@@ -13831,10 +13824,6 @@
       "Magnetite_k250",
       "Magnetite_k500",
       "Magnetite_k1500",
-      "CaF2_k0",
-      "CaF2_k250",
-      "CaF2_k500",
-      "CaF2_k1500",
       "CaO_k0",
       "CaO_k250",
       "CaO_k500",
@@ -13843,6 +13832,10 @@
       "Portlandite_k250",
       "Portlandite_k500",
       "Portlandite_k1500",
+      "CaF2_k0",
+      "CaF2_k250",
+      "CaF2_k500",
+      "CaF2_k1500",
       "Nontronite_k0",
       "Nontronite_k250",
       "Nontronite_k500",
