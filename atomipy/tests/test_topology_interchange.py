@@ -247,8 +247,8 @@ def test_forcefield_itp_vs_json():
 
     ff_itp = rd.read_forcefield_itp(
         [os.path.join(ffdir, "ffnonbonded_gminff.itp"), os.path.join(ffdir, "ffbonded.itp")],
-        defines=["GMINFF_k500"], include_dirs=[ffdir])
-    ff_json = rd.read_forcefield_json("GMINFF/gminff_all.json", variant="GMINFF_k500")
+        defines=["MINFF_k500"], include_dirs=[ffdir])
+    ff_json = rd.read_forcefield_json("GMINFF/gminff_all.json", variant="MINFF_k500")
 
     t_itp = _bare_oh_alo_system(); rd.apply_forcefield(t_itp, ff_itp)
     t_json = _bare_oh_alo_system(); rd.apply_forcefield(t_json, ff_json)

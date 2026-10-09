@@ -531,8 +531,8 @@ def process_file_task(
                     if ff_type == 'clayff':
                         mineral_block = 'CLAYFF_2004'
                     else:
-                        k_map = {'0': 'GMINFF_k0', '250': 'GMINFF_k250', '500': 'GMINFF_k500', '1500': 'GMINFF_k1500'}
-                        mineral_block = k_map.get(str(angle_terms), 'GMINFF_k500')
+                        k_map = {'0': 'MINFF_k0', '250': 'MINFF_k250', '500': 'MINFF_k500', '1500': 'MINFF_k1500'}
+                        mineral_block = k_map.get(str(angle_terms), 'MINFF_k500')
                     ap = get_ap()
                     ff_params = ap.load_forcefield(
                         'GMINFF/gminff_all.json',
