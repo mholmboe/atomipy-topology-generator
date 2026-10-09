@@ -1,0 +1,77 @@
+atomipy-topology-generator - third-party components and attribution
+====================================================================
+
+atomipy-topology-generator itself is released under the MIT License; see LICENSE.
+This file records the parts that are not covered by it.
+
+-------------------------------------------------------------------------------
+1. atomipy (MIT, Copyright (c) 2024-2026 Michael Holmboe)
+-------------------------------------------------------------------------------
+
+  atomipy/
+
+A full copy of the atomipy package (https://github.com/mholmboe/atomipy) is
+vendored here. It is MIT licensed and carries its own licence and notices in
+atomipy/LICENSE and atomipy/NOTICE, which remain authoritative for everything
+under that directory. The two sections below restate the parts of those notices
+that matter most for redistribution.
+
+-------------------------------------------------------------------------------
+2. Avogadro2 molecule library (BSD 3-Clause, Copyright (c) 2016 Geoffrey
+   Hutchison, University of Pittsburgh)
+-------------------------------------------------------------------------------
+
+  atomipy/structures/molecules/**/*.cjson   (428 files)
+
+A curated subset of the Avogadro2 molecules library
+(https://github.com/OpenChemistry/molecules). The full BSD 3-Clause text is in
+atomipy/structures/molecules/LICENSE. Note its third clause: the names of the
+copyright holder and contributors may not be used to endorse or promote
+derived products without specific prior written permission.
+
+-------------------------------------------------------------------------------
+3. GROMACS data files (LGPL-2.1-or-later)
+-------------------------------------------------------------------------------
+
+The bundled MINFF force field under atomipy/ffparams/min.ff/ contains files
+taken from or derived from GROMACS. GROMACS is free software, licensed under
+the GNU Lesser General Public License, version 2.1 or (at your option) any
+later version. Those files remain under that licence, which travels with them.
+See https://www.gromacs.org and the COPYING file in any GROMACS distribution.
+
+  atomipy/ffparams/min.ff/atommass.dat
+  atomipy/ffparams/min.ff/atomtypes.atp
+  atomipy/ffparams/min.ff/electroneg.dat
+  atomipy/ffparams/min.ff/elements.dat
+  atomipy/ffparams/min.ff/flexwat-ferguson.itp
+  atomipy/ffparams/min.ff/nsfactor.dat
+  atomipy/ffparams/min.ff/residuetypes.dat
+  atomipy/ffparams/min.ff/spc.itp
+  atomipy/ffparams/min.ff/spce.itp
+  atomipy/ffparams/min.ff/tip3p.itp
+  atomipy/ffparams/min.ff/tip4p.itp
+  atomipy/ffparams/min.ff/tip4pew.itp
+  atomipy/ffparams/min.ff/tip5p.itp
+  atomipy/ffparams/min.ff/tips3p.itp
+  atomipy/ffparams/min.ff/watermodels.dat
+
+Because the GROMACS licence permits "any later version", these files may be
+taken under LGPL-3.0, which is compatible with GPL-3.0.
+
+-------------------------------------------------------------------------------
+Attribution for scientific content
+-------------------------------------------------------------------------------
+
+Force-field parameters are facts rather than copyrightable expression, so no
+licence restriction attaches to them. The original work should be cited:
+
+  - MINFF: https://github.com/mholmboe/minff
+  - CLAYFF: Cygan, Liang and Kalinichev, J. Phys. Chem. B 2004, 108, 1255-1266.
+  - Ion parameters: Joung and Cheatham (2008), Aqvist (1990), Babu and Lim
+    (2006), and Li, Song, Merz and co-workers (2015-2021), as listed in the
+    header of atomipy/ffparams/min.ff/ions.itp.
+  - Oxygen charge smearing: Lammers et al. (2017),
+    doi:10.1016/j.jcis.2016.11.084.
+  - Water model parameters: the respective original publications.
+  - Crystal structures: the crystallographic studies cited where those
+    structures are documented.
