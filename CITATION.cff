@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+title: "atomipy topology generator"
+message: "If you use the atomipy topology generator in your research, please cite it using the metadata below, together with the atomipy library it is built on."
+type: software
+authors:
+  - family-names: Holmboe
+    given-names: Michael
+    email: michael.holmboe@umu.se
+    affiliation: "Umeå University, Sweden"
+version: "0.1.0"
+date-released: 2026-06-06
+license: MIT
+repository-code: "https://github.com/mholmboe/atomipy-topology-generator"
+url: "https://topology.atomipy.io"
+abstract: >-
+  A web application that automates atom typing and molecular topology
+  generation for mineral and material systems, built on the atomipy Python
+  library. It prepares structures for molecular dynamics simulations with the
+  MINFF and CLAYFF force fields through a browser interface.
+keywords:
+  - molecular modelling
+  - molecular dynamics
+  - clay minerals
+  - minerals
+  - force field
+  - topology
+  - atom typing
+  - MINFF
+  - CLAYFF
+  - GROMACS
+  - web application
+references:
+  - type: software
+    title: "atomipy: Atomistic Topology Operations in Python"
+    authors:
+      - family-names: Holmboe
+        given-names: Michael
+    repository-code: "https://github.com/mholmboe/atomipy"
